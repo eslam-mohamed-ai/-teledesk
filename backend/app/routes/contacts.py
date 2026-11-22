@@ -17,6 +17,7 @@ from app.database import get_db
 from app.deps import current_company, current_user, require_role
 from app.models import (
     Attachment,
+    Channel,
     Company,
     Contact,
     ContactFieldDefinition,
@@ -374,19 +375,24 @@ def contact_conversations(
         .where(Conversation.contact_id == contact_id)
         .order_by(Conversation.created_at.desc())
     ).all()
-    return {
-        "items": [
+    items = []
+    for conv in rows:
+        provider = None
+        if conv.channel_id:
+            channel = db.get(Channel, conv.channel_id)
+            if channel is not None:
+                provider = channel.provider
+        items.append(
             {
                 "id": conv.id,
-                "provider": db.get(Channel, conv.channel_id).provider if conv.channel_id else None,
+                "provider": provider,
                 "status": conv.status,
                 "last_preview": conv.last_preview,
                 "created_at": conv.created_at.isoformat() if conv.created_at else None,
                 "last_message_at": conv.last_message_at.isoformat() if conv.last_message_at else None,
             }
-            for conv in rows
-        ]
-    }
+        )
+    return {"items": items}
 
 
 @router.patch("/{contact_id}", response_model=ContactOut)

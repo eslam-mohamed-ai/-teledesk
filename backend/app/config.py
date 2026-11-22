@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "change-me"
     PUBLIC_BASE_URL: str = ""
 
+    # Encryption key rotation
+    ENCRYPTION_KEY_VERSION: int = 1
+    ENCRYPTION_KEYS: str = "{}"
+
     # Cookie / session settings
     SESSION_COOKIE_NAME: str = "teledesk_session"
     REFRESH_COOKIE_NAME: str = "teledesk_refresh"
@@ -57,6 +61,10 @@ class Settings(BaseSettings):
     # Rate limiting / lockout
     LOGIN_MAX_FAILED_ATTEMPTS: int = 5
     LOGIN_LOCKOUT_WINDOW_SECONDS: int = 900
+
+    # CORS: comma-separated list of allowed origins. Locked to configured
+    # origins; in production this must list only the frontend's public origin(s).
+    CORS_ALLOWED_ORIGINS: str = ""
 
     @model_validator(mode="after")
     def validate_runtime_configuration(self):

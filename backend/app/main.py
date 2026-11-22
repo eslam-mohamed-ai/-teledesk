@@ -8,6 +8,7 @@ from app.static import SPAFiles
 from app.database import init_db
 from app.logging_config import configure_logging
 from app.middleware import RequestIDMiddleware
+from app.security_middleware import add_security_middleware
 from app.routes import (
     auth,
     billing,
@@ -45,6 +46,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="TeleDesk", lifespan=lifespan)
 app.add_middleware(RequestIDMiddleware)
+add_security_middleware(app)
 
 for r in (auth, company, documents, bots, conversations, contacts, stats, billing, team, onboarding, realtime):
     app.include_router(r.router, prefix="/api")

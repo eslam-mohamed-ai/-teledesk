@@ -242,7 +242,10 @@ class TelegramAdapter(ChannelAdapter):
             encrypted = channel.get("credentials_encrypted")
         if not encrypted:
             raise PermanentSendError("telegram channel has no credentials")
-        return decrypt(encrypted)
+        key_version = getattr(channel, "credentials_key_version", None)
+        if key_version is None and isinstance(channel, dict):
+            key_version = channel.get("credentials_key_version")
+        return decrypt(encrypted, key_version=key_version)
 
     async def _async_get_me(self, token: str) -> dict:
         # httpx is sync; run in executor to keep the async interface.

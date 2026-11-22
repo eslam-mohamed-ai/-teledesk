@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import current_company
 from app.models import Chunk, Company, Document
+from app.security import av_scan, validate_magic_bytes
 from app.services import storage
 from app.services.plans import PLANS, usage
 from app.workers.process_document import process_document
@@ -215,12 +216,21 @@ async def upload(
     if not data:
         raise HTTPException(400, "الملف فارغ")
 
+    # Magic-byte validation: the real file type must match the extension.
+    try:
+        kind = validate_magic_bytes(data, extension)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    # Antivirus scan hook (wired to a real scanner in production).
+    av_scan(data, filename)
+
     return _dict(
         _create(
             db,
             company,
             filename,
-            KINDS[extension],
+            kind,
             data,
         )
     )
