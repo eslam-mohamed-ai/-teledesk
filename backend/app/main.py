@@ -12,6 +12,7 @@ from app.routes import (
     auth,
     billing,
     bots,
+    channels,
     company,
     conversations,
     documents,
@@ -45,6 +46,8 @@ for r in (auth, company, documents, bots, conversations, stats, billing):
     app.include_router(r.router, prefix="/api")
 
 app.include_router(webhooks.router)
+app.include_router(channels.router)
+app.include_router(channels.webhook_router)
 app.include_router(health.router)
 
 # الواجهة تتخدم من نفس السيرفر (لازم تتحط آخر حاجة)
