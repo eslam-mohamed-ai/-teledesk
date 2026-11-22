@@ -124,3 +124,24 @@ extensions, or schema drift.
 
 **Consequence:** CI credentials are test-only. Never use a developer's `.env` or
 production database for the migration check.
+
+## ADR-010: Preserve legacy Telegram columns during channel-agnostic migration
+
+**Decision:** Phase 1 adds the channel-agnostic tables and columns additively and
+keeps all legacy Telegram-specific columns (`bots.token_encrypted`,
+`conversations.bot_id`, `conversations.tg_chat_id`, `Message.content` Text,
+`Conversation.status` bot/needs_human/human/closed) nullable and unchanged.
+Legacy rows are backfilled into the new model, but the channel-agnostic
+`Conversation.status` (open/pending/closed) and structured `Message.content`
+(JSONB) are intentionally not introduced yet, because they collide with existing
+columns of different semantics and changing them would alter runtime behavior.
+
+**Rationale:** The ground rule requires existing Telegram behavior to keep
+working and no columns to be dropped in Phase 1. Repurposing `status` or
+`content` in-place would break the bots/conversations routes and message
+rendering that read them as plain text/status strings.
+
+**Consequence:** A later phase must map legacy `status` values to the new
+open/pending/closed model and migrate `content` to a JSONB representation under
+a non-colliding column or a careful in-place conversion, each with its own
+migration and backfill.
