@@ -126,18 +126,20 @@ Exact route names and versioning should be settled before the feature phase.
 
 ## Migrations and rollout
 
-1. Establish Alembic and a reviewed initial migration matching the present
-   schema. Existing databases must be inspected against that baseline before
-   stamping it; stamping records migration history and does not create missing
-   tables.
-2. Deploy the initial migration and stop using ORM `create_all()` for schema
-   evolution. Startup may still ensure the PostgreSQL `vector` extension exists.
-3. Add channel integration and provider event/delivery storage in a separate
+1. Establish Alembic and a reviewed initial migration matching the pre-foundation
+   schema. New indexes are in a following migration so existing databases can
+   stamp the baseline and then receive those indexes normally.
+2. Before stamping an existing database, inspect it against the baseline;
+   stamping records migration history and does not create or verify schema
+   objects. Stamp the baseline revision, then upgrade to head.
+3. Stop using ORM `create_all()` for schema evolution. Startup may still ensure
+   the PostgreSQL `vector` extension exists.
+4. Add channel integration and provider event/delivery storage in a separate
    additive migration.
-4. Backfill existing Telegram bots/conversations and verify row counts,
+5. Backfill existing Telegram bots/conversations and verify row counts,
    foreign keys, tenant ownership, and representative conversation histories.
-5. Deploy provider-neutral reads/writes while preserving Telegram compatibility.
-6. Add Messenger onboarding/webhooks/send behavior; only later remove legacy
+6. Deploy provider-neutral reads/writes while preserving Telegram compatibility.
+7. Add Messenger onboarding/webhooks/send behavior; only later remove legacy
    Telegram-only columns in a separately reviewed migration.
 
 All production schema changes must use Alembic revisions. Do not run `stamp` or
