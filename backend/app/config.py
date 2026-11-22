@@ -36,6 +36,28 @@ class Settings(BaseSettings):
     JWT_SECRET: str = "change-me"
     PUBLIC_BASE_URL: str = ""
 
+    # Cookie / session settings
+    SESSION_COOKIE_NAME: str = "teledesk_session"
+    REFRESH_COOKIE_NAME: str = "teledesk_refresh"
+    CSRF_COOKIE_NAME: str = "teledesk_csrf"
+    COOKIE_SECURE: bool = False
+    COOKIE_SAMESITE: str = "lax"
+    ACCESS_TOKEN_TTL_SECONDS: int = 15 * 60
+    ENABLE_BEARER_AUTH: bool = False
+    CSRF_PROTECTION_ENABLED: bool = True
+
+    # SMTP settings
+    SMTP_HOST: str = "localhost"
+    SMTP_PORT: int = 1025
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "noreply@teledesk.local"
+    SMTP_USE_TLS: bool = False
+
+    # Rate limiting / lockout
+    LOGIN_MAX_FAILED_ATTEMPTS: int = 5
+    LOGIN_LOCKOUT_WINDOW_SECONDS: int = 900
+
     @model_validator(mode="after")
     def validate_runtime_configuration(self):
         if self.APP_ENV == "development":

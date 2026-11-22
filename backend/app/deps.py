@@ -2,17 +2,17 @@
 import hashlib
 import hmac
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
 from app.models import Company, User
-
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -81,32 +81,46 @@ def make_token(user_id: int) -> str:
     )
 
 
+def _decode_access_token(token: str) -> int | None:
+    try:
+        payload = jwt.decode(
+            token,
+            settings.JWT_SECRET,
+            algorithms=["HS256"],
+            options={"require": ["sub", "exp", "type"]},
+        )
+        if payload.get("type") != "access":
+            return None
+        subject = payload.get("sub")
+        if not isinstance(subject, str) or not subject.isdigit():
+            return None
+        return int(subject)
+    except (jwt.InvalidTokenError, ValueError, TypeError):
+        return None
+
+
+def _get_access_token(request: Request, creds: HTTPAuthorizationCredentials | None) -> str | None:
+    # Bearer header (behind flag for API/testing)
+    if settings.ENABLE_BEARER_AUTH and creds and creds.scheme.lower() == "bearer":
+        return creds.credentials
+    # Cookie
+    return request.cookies.get(settings.SESSION_COOKIE_NAME)
+
+
 def current_user(
+    request: Request,
     creds: HTTPAuthorizationCredentials | None = Depends(bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    if not creds or creds.scheme.lower() != "bearer":
+    token = _get_access_token(request, creds)
+    if not token:
         raise HTTPException(
             status_code=401,
             detail="لازم تسجّل دخول",
         )
 
-    try:
-        payload = jwt.decode(
-            creds.credentials,
-            settings.JWT_SECRET,
-            algorithms=["HS256"],
-            options={"require": ["sub", "exp"]},
-        )
-
-        subject = payload.get("sub")
-
-        if not isinstance(subject, str) or not subject.isdigit():
-            raise ValueError("Invalid token subject")
-
-        user_id = int(subject)
-
-    except (jwt.InvalidTokenError, ValueError, TypeError):
+    user_id = _decode_access_token(token)
+    if user_id is None:
         raise HTTPException(
             status_code=401,
             detail="الجلسة انتهت أو غير صالحة",
@@ -136,3 +150,44 @@ def current_company(
         )
 
     return company
+
+
+def require_role(*roles: str):
+    def dependency(user: User = Depends(current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(
+                status_code=403,
+                detail="غير مصرح لك بهذه العملية",
+            )
+        return user
+
+    return dependency
+
+
+def require_owner(user: User = Depends(current_user)) -> User:
+    if user.role != "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="لازم تكون مالك الحساب",
+        )
+    return user
+
+
+def csrf_protect(request: Request) -> None:
+    """Double-submit CSRF check for state-changing requests."""
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return
+    if not settings.CSRF_PROTECTION_ENABLED:
+        return
+    cookie_token = request.cookies.get(settings.CSRF_COOKIE_NAME, "")
+    header_token = request.headers.get("x-csrf-token", "")
+    if not cookie_token or not hmac.compare_digest(cookie_token, header_token):
+        raise HTTPException(
+            status_code=403,
+            detail="رمز CSRF غير صالح",
+        )
+
+
+def make_csrf_token() -> str:
+    return secrets.token_urlsafe(32)
+

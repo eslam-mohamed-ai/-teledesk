@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -37,6 +38,9 @@ class Company(Base):
     handoff_after_two: Mapped[bool] = mapped_column(Boolean, default=False)
     work_hours: Mapped[str] = mapped_column(String(200), default="")
     plan: Mapped[str] = mapped_column(String(20), default="free")
+    onboarding_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    profile: Mapped[dict | None] = mapped_column(postgresql.JSONB(astext_type=Text()), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="company")
