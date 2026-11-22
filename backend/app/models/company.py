@@ -1,7 +1,18 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
+
 from sqlalchemy import Boolean, DateTime, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from app.database import Base
+
+if TYPE_CHECKING:
+    from .bot import Bot
+    from .chunk import Chunk
+    from .conversation import Conversation
+    from .document import Document
+    from .message import Message
+    from .user import User
 
 
 class Company(Base):
@@ -20,3 +31,10 @@ class Company(Base):
     work_hours: Mapped[str] = mapped_column(String(200), default="")
     plan: Mapped[str] = mapped_column(String(20), default="free")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    users: Mapped[list["User"]] = relationship(back_populates="company")
+    bots: Mapped[list["Bot"]] = relationship(back_populates="company")
+    conversations: Mapped[list["Conversation"]] = relationship(back_populates="company")
+    messages: Mapped[list["Message"]] = relationship(back_populates="company")
+    documents: Mapped[list["Document"]] = relationship(back_populates="company")
+    chunks: Mapped[list["Chunk"]] = relationship(back_populates="company")

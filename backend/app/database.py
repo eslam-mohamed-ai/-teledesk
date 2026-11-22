@@ -1,10 +1,19 @@
 
 """إعداد اتصال قاعدة البيانات وتهيئة الجداول."""
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
+
+
+NAMING_CONVENTION = {
+    "ix": "ix_%(table_name)s_%(column_0_name)s",
+    "uq": "%(table_name)s_%(column_0_name)s_key",
+    "ck": "%(table_name)s_%(constraint_name)s_check",
+    "fk": "%(table_name)s_%(column_0_name)s_fkey",
+    "pk": "%(table_name)s_pkey",
+}
 
 
 engine = create_engine(
@@ -21,7 +30,7 @@ SessionLocal = sessionmaker(
 
 
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 def get_db():
@@ -34,14 +43,9 @@ def get_db():
 
 
 def init_db():
-    """تفعيل pgvector وإنشاء الجداول."""
+    """تفعيل امتداد pgvector المطلوب للجداول."""
 
     with engine.begin() as conn:
         conn.execute(
             text("CREATE EXTENSION IF NOT EXISTS vector")
         )
-
-    # تحميل الموديلات قبل إنشاء الجداول.
-    import app.models  # noqa: F401
-
-    Base.metadata.create_all(bind=engine)
