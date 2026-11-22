@@ -33,10 +33,18 @@ ngrok http 8000             # حط عنوان https في PUBLIC_BASE_URL وأع�
 
 ## الاختبارات
 ```bash
-cd backend && pip install pytest && pytest
+pip install -r backend/requirements-dev.txt
+make test
 ```
+
+## قاعدة البيانات والترحيلات
+- `make migrate` يطبق ترحيلات Alembic على قاعدة البيانات المحددة في `.env`.
+- `docker compose up` يشغّل خدمة `migrate` قبل الـ API والـ worker.
+- عند استخدام قاعدة موجودة من إصدار سابق، افحص الـ schema وخذ نسخة احتياطية
+  قبل ختم baseline؛ الأمر لا ينشئ الجداول أو يتحقق منها:
+  `make stamp-existing CONFIRM_EXISTING_SCHEMA=yes`
 
 ## ملاحظات قبل الإطلاق التجاري
 - Gemini المجاني: Google ممكن تستخدم البيانات، فانقل للخطة المدفوعة.
 - `POST /api/billing/plan` بيغيّر الخطة من غير دفع (للتطوير بس). اربط Stripe/Paymob.
-- الجداول بتتعمل تلقائيا عند التشغيل. لما الـ schema يتغير في الإنتاج استخدم Alembic.
+- تغييرات الـ schema تُدار بترحيلات Alembic؛ التطبيق لا ينشئ الجداول عند التشغيل.

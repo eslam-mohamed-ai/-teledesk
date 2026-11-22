@@ -1,4 +1,6 @@
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -7,8 +9,6 @@ from app.database import get_db
 from app.deps import current_company
 from app.models import Company
 from app.services.plans import PLANS, usage
-
-import logging
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 log = logging.getLogger("teledesk.billing")
@@ -27,8 +27,8 @@ def billing(
 
     if current_plan not in PLANS:
         raise HTTPException(
-            500,
-            "خطة الشركة الحالية غير معروفة",
+            status_code=500,
+            detail="خطة الشركة الحالية غير معروفة",
         )
 
     return {
@@ -42,51 +42,22 @@ def billing(
 def change_plan(
     body: PlanIn,
     c: Company = Depends(current_company),
-    db: Session = Depends(get_db),
 ):
-    """
-    وضع التطوير فقط:
-    تغيير الخطة بدون دفع.
-
-    يجب استبدال هذا المسار بنظام دفع حقيقي
-    قبل الإطلاق التجاري.
-    """
-
     new_plan = body.plan.strip().lower()
 
     if new_plan not in PLANS:
         raise HTTPException(
-            400,
-            "خطة غير معروفة",
+            status_code=400,
+            detail="خطة غير معروفة",
         )
 
-    old_plan = c.plan
+    log.warning(
+        "Plan change blocked: company_id=%s requested_plan=%s",
+        c.id,
+        new_plan,
+    )
 
-    if old_plan == new_plan:
-        return {
-            "ok": True,
-            "plan": new_plan,
-        }
-
-    try:
-        c.plan = new_plan
-        db.commit()
-        db.refresh(c)
-
-    except Exception:
-        db.rollback()
-
-        log.exception(
-            "Failed to change company plan: company_id=%s",
-            c.id,
-        )
-
-        raise HTTPException(
-            500,
-            "حصل خطأ أثناء تغيير الخطة",
-        )
-
-    return {
-        "ok": True,
-        "plan": c.plan,
-    }
+    raise HTTPException(
+        status_code=501,
+        detail="تغيير الخطط غير متاح حاليًا. يجب إتمام الدفع والتحقق منه أولًا.",
+    )

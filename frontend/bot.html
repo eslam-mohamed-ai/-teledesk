@@ -31,7 +31,7 @@
   <p class="row" style="margin-bottom:16px">
     <span class="tag">✓ إنشاء البوت</span>
     <span class="tag b">2 ربط المفتاح</span>
-    <span class="tag" style="background:#eef2f7;color:var(--mut)">
+    <span class="tag" style="background:#eef2f7;color:var(--muted)">
       3 التجربة والتشغيل
     </span>
   </p>
@@ -130,7 +130,7 @@ const toggleBtn = document.getElementById('toggleBtn');
 
 function showMessage(text, success = false) {
   msg.textContent = text;
-  msg.style.color = success ? 'var(--g)' : 'var(--r)';
+  msg.style.color = success ? 'var(--success)' : 'var(--danger)';
 }
 
 function addBubble(text, type = '') {
@@ -263,16 +263,22 @@ async function toggleBot() {
   try {
     const result = await API.toggleBot();
 
-    alert(
-      result.active
-        ? 'تم تشغيل البوت بنجاح.'
-        : 'تم إيقاف البوت مؤقتًا.'
-    );
+    const message = result.active ? 'تم تشغيل البوت بنجاح.' : 'تم إيقاف البوت مؤقتًا.';
+    if (window.TeleDeskApp && window.TeleDeskApp.toast) {
+      window.TeleDeskApp.toast(message, 'success');
+    } else {
+      alert(message);
+    }
 
     await loadBot();
 
   } catch (error) {
-    alert(error.message || 'تعذر تغيير حالة البوت.');
+    const message = error.message || 'تعذر تغيير حالة البوت.';
+    if (window.TeleDeskApp && window.TeleDeskApp.toast) {
+      window.TeleDeskApp.toast(message, 'error');
+    } else {
+      alert(message);
+    }
   } finally {
     toggleBtn.disabled = false;
   }
@@ -290,10 +296,16 @@ async function disconnectBot() {
     await API.disconnectBot();
 
     showMessage('تم فصل البوت.', true);
+    if (window.TeleDeskApp && window.TeleDeskApp.toast) {
+      window.TeleDeskApp.toast('تم فصل البوت.', 'success');
+    }
     await loadBot();
 
   } catch (error) {
     showMessage(error.message || 'تعذر فصل البوت.');
+    if (window.TeleDeskApp && window.TeleDeskApp.toast) {
+      window.TeleDeskApp.toast(error.message || 'تعذر فصل البوت.', 'error');
+    }
   }
 }
 
