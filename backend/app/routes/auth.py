@@ -149,7 +149,7 @@ def _set_session_cookies(response: Response, access_token: str, refresh_token: s
         httponly=True,
         secure=secure,
         samesite=samesite,
-        path="/auth",
+        path="/api/auth",
     )
     response.set_cookie(
         settings.CSRF_COOKIE_NAME,

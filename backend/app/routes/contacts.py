@@ -263,11 +263,24 @@ class ContactOut(BaseModel):
     status: str | None
     custom_fields: dict | None
     tags: list[str] = []
+    ai_collected_fields: list[str] = []
     created_at: str
     last_seen_at: str | None
 
 
-def _contact_out(contact: Contact) -> ContactOut:
+def _ai_collected_keys(db: Session, c: Company, contact: Contact) -> list[str]:
+    """Keys the AI collected in chat (ask_in_chat fields with a stored value)."""
+    definitions = db.scalars(
+        select(ContactFieldDefinition).where(
+            ContactFieldDefinition.company_id == c.id,
+            ContactFieldDefinition.ask_in_chat.is_(True),
+        )
+    ).all()
+    fields = contact.custom_fields or {}
+    return [d.key for d in definitions if fields.get(d.key) not in (None, "")]
+
+
+def _contact_out(contact: Contact, ai_collected_fields: list[str] | None = None) -> ContactOut:
     return ContactOut(
         id=contact.id,
         display_name=contact.display_name,
@@ -282,6 +295,7 @@ def _contact_out(contact: Contact) -> ContactOut:
         status=contact.status,
         custom_fields=contact.custom_fields,
         tags=[t.name for t in contact.tags],
+        ai_collected_fields=ai_collected_fields or [],
         created_at=contact.created_at.isoformat(),
         last_seen_at=contact.last_seen_at.isoformat() if contact.last_seen_at else None,
     )
@@ -310,7 +324,7 @@ def list_contacts(
     if tag:
         stmt = stmt.join(Contact.tags).where(Tag.name == tag)
     rows = db.scalars(stmt.order_by(Contact.last_seen_at.desc().nullslast(), Contact.id.desc())).all()
-    return [_contact_out(r) for r in rows]
+    return [_contact_out(r, _ai_collected_keys(db, c, r)) for r in rows]
 
 
 @router.get("/{contact_id}", response_model=ContactOut)
@@ -325,7 +339,7 @@ def get_contact(
     )
     if not contact:
         raise HTTPException(404, "الجهة غير موجودة")
-    return _contact_out(contact)
+    return _contact_out(contact, _ai_collected_keys(db, c, contact))
 
 
 class ContactUpdate(BaseModel):
@@ -339,6 +353,40 @@ class ContactUpdate(BaseModel):
     timezone: str | None = None
     status: str | None = None
     custom_fields: dict | None = None
+
+
+@router.get("/{contact_id}/conversations")
+def contact_conversations(
+    contact_id: int,
+    c: Company = Depends(current_company),
+    actor: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    """Previous conversations for a contact (contact panel history)."""
+    contact = db.scalar(
+        select(Contact).where(Contact.id == contact_id, Contact.company_id == c.id)
+    )
+    if not contact:
+        raise HTTPException(404, "الجهة غير موجودة")
+
+    rows = db.scalars(
+        select(Conversation)
+        .where(Conversation.contact_id == contact_id)
+        .order_by(Conversation.created_at.desc())
+    ).all()
+    return {
+        "items": [
+            {
+                "id": conv.id,
+                "provider": db.get(Channel, conv.channel_id).provider if conv.channel_id else None,
+                "status": conv.status,
+                "last_preview": conv.last_preview,
+                "created_at": conv.created_at.isoformat() if conv.created_at else None,
+                "last_message_at": conv.last_message_at.isoformat() if conv.last_message_at else None,
+            }
+            for conv in rows
+        ]
+    }
 
 
 @router.patch("/{contact_id}", response_model=ContactOut)

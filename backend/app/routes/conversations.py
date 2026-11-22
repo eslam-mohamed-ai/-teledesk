@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.deps import current_company, current_user
 from app.models import (
+    CannedReply,
     Channel,
     Company,
     Contact,
@@ -44,6 +45,7 @@ class ConversationOut(BaseModel):
     id: int
     channel_id: int | None
     provider: str | None
+    channel_provider: str | None = None
     contact_id: int | None
     contact_name: str | None
     assignee_user_id: int | None
@@ -55,6 +57,10 @@ class ConversationOut(BaseModel):
     last_message_at: str | None
     last_inbound_at: str | None
     created_at: str | None
+    ai_handling: bool = False
+    needs_human: bool = False
+    window_open: bool = True
+    window_expires_at: str | None = None
 
 
 class MessageOut(BaseModel):
@@ -89,10 +95,19 @@ def _conv_out(db: Session, conv: Conversation) -> ConversationOut:
         u = db.get(User, conv.assignee_user_id)
         if u:
             assignee_name = u.name
+
+    # Messaging service window (e.g. WhatsApp 24h customer service window).
+    # Derived from the last inbound message; absent inbound => open.
+    window_expires_at = None
+    if conv.last_inbound_at:
+        window_expires_at = conv.last_inbound_at + timedelta(hours=24)
+    window_open = window_expires_at is None or window_expires_at > _now()
+
     return ConversationOut(
         id=conv.id,
         channel_id=conv.channel_id,
         provider=provider,
+        channel_provider=provider,
         contact_id=conv.contact_id,
         contact_name=contact_name,
         assignee_user_id=conv.assignee_user_id,
@@ -104,6 +119,10 @@ def _conv_out(db: Session, conv: Conversation) -> ConversationOut:
         last_message_at=conv.last_message_at.isoformat() if conv.last_message_at else None,
         last_inbound_at=conv.last_inbound_at.isoformat() if conv.last_inbound_at else None,
         created_at=conv.created_at.isoformat() if conv.created_at else None,
+        ai_handling=conv.status in ("bot", "open"),
+        needs_human=conv.status == "needs_human",
+        window_open=window_open,
+        window_expires_at=window_expires_at.isoformat() if window_expires_at else None,
     )
 
 
@@ -179,6 +198,75 @@ def list_conversations(
         "has_more": has_more,
         "next_cursor": rows[-1].id if has_more else None,
     }
+
+
+# ---------------------------------------------------------------------------
+# Canned replies (used by the composer "/" shortcut)
+# ---------------------------------------------------------------------------
+
+
+class CannedReplyIn(BaseModel):
+    shortcut: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=4000)
+
+
+@router.get("/canned-replies")
+def list_canned_replies(
+    c: Company = Depends(current_company),
+    actor: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.scalars(
+        select(CannedReply)
+        .where(CannedReply.company_id == c.id)
+        .order_by(CannedReply.shortcut)
+    ).all()
+    return {
+        "items": [
+            {
+                "id": r.id,
+                "shortcut": r.shortcut,
+                "title": r.title,
+                "body": r.body,
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.post("/canned-replies", status_code=201)
+def create_canned_reply(
+    body: CannedReplyIn,
+    c: Company = Depends(current_company),
+    actor: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    reply = CannedReply(
+        company_id=c.id,
+        shortcut=body.shortcut.lstrip("/"),
+        title=body.title,
+        body=body.body,
+    )
+    db.add(reply)
+    db.commit()
+    db.refresh(reply)
+    return {"id": reply.id, "shortcut": reply.shortcut, "title": reply.title, "body": reply.body}
+
+
+@router.delete("/canned-replies/{reply_id}", status_code=204)
+def delete_canned_reply(
+    reply_id: int,
+    c: Company = Depends(current_company),
+    actor: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    reply = db.get(CannedReply, reply_id)
+    if not reply or reply.company_id != c.id:
+        raise HTTPException(404, "الرد الجاهز مش موجود")
+    db.delete(reply)
+    db.commit()
+    return Response(status_code=204)
 
 
 # ---------------------------------------------------------------------------

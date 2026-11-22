@@ -1,73 +1,50 @@
 import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from "axios"
-import { getCookie, setCookie, removeCookie } from "./cookies"
+import { getCookie } from "./cookies"
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api"
 
-export const COOKIE_ACCESS = "teledesk_session"
-export const COOKIE_REFRESH = "teledesk_refresh"
 export const COOKIE_CSRF = "teledesk_csrf"
 
-let isRefreshing = false
-let refreshSubscribers: ((token: string) => void)[] = []
-
-function onRefreshed(token: string) {
-  refreshSubscribers.forEach((cb) => cb(token))
-  refreshSubscribers = []
-}
-
-function addRefreshSubscriber(cb: (token: string) => void) {
-  refreshSubscribers.push(cb)
+export function getCsrfToken(): string | null {
+  return getCookie(COOKIE_CSRF)
 }
 
 export function createApi(): AxiosInstance {
   const api = axios.create({
     baseURL: API_BASE,
     withCredentials: true,
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers: { "Content-Type": "application/json" },
   })
 
+  // Cookie-based auth: the access token lives in an HttpOnly cookie. We only
+  // mirror the double-submit CSRF token into a header.
   api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-    const csrf = getCookie(COOKIE_CSRF)
-    if (csrf) {
-      config.headers["X-CSRF-Token"] = csrf
-    }
+    const csrf = getCsrfToken()
+    if (csrf) config.headers["X-CSRF-Token"] = csrf
     return config
   })
 
+  // Silent refresh: on 401 call POST /auth/refresh (rotating refresh cookie),
+  // then replay the original request once. No tokens touch JavaScript storage.
   api.interceptors.response.use(
     (res) => res,
     async (err) => {
       const original = err.config
-      if (err.response?.status === 401 && !original._retry) {
+      const isRefreshCall = original?.url?.includes("/auth/refresh")
+      // /auth/me is the session probe run on every page load. A 401 there
+      // simply means "not signed in" and must not trigger a redirect loop.
+      const isAuthProbe = original?.url?.includes("/auth/me")
+      if (err.response?.status === 401 && !original?._retry && !isRefreshCall && !isAuthProbe) {
         original._retry = true
-        if (!isRefreshing) {
-          isRefreshing = true
-          try {
-            const { data } = await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true })
-            const access = data.access_token
-            if (access) {
-              setCookie(COOKIE_ACCESS, access, 900)
-              onRefreshed(access)
-            }
-            return api(original)
-          } catch {
-            removeCookie(COOKIE_ACCESS)
-            removeCookie(COOKIE_REFRESH)
-            removeCookie(COOKIE_CSRF)
+        try {
+          await axios.post(`${API_BASE}/auth/refresh`, {}, { withCredentials: true })
+          return api(original)
+        } catch {
+          if (!window.location.pathname.startsWith("/auth/")) {
             window.location.href = "/auth/login"
-            return Promise.reject(err)
-          } finally {
-            isRefreshing = false
           }
+          return Promise.reject(err)
         }
-        return new Promise((resolve) => {
-          addRefreshSubscriber((token) => {
-            original.headers["Authorization"] = `Bearer ${token}`
-            resolve(api(original))
-          })
-        })
       }
       return Promise.reject(err)
     },
@@ -77,5 +54,14 @@ export function createApi(): AxiosInstance {
 }
 
 export const api = createApi()
+
+export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === "string") return detail
+  if (Array.isArray(detail) && detail[0] && typeof detail[0] === "object" && "msg" in detail[0]) {
+    return String((detail[0] as { msg: string }).msg)
+  }
+  return fallback
+}
 
 export type { AxiosInstance }

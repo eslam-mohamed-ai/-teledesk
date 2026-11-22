@@ -37,7 +37,6 @@ export default function Login() {
       setAuth(
         { id: user.id, name: user.name, email: user.email, role: user.role, email_verified },
         { id: user.id, name: user.name, plan: "free", onboarding_step: "profile", onboarding_completed_at: null, profile: {}, lead_capture_enabled: false, lead_capture_consent_text: "" },
-        "",
       )
       if (!email_verified) {
         navigate("/auth/verify-email")

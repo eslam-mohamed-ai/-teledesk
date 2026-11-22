@@ -109,6 +109,10 @@ settings = Settings(
     _env_file=None if os.environ.get("APP_ENV") == "test" else ROOT / ".env"
 )  # type: ignore[call-arg]
 
-FRONTEND_DIR = ROOT / "frontend"
+_FRONTEND_DIST = ROOT / "frontend" / "dist"
+FRONTEND_DIR = Path(
+    os.environ.get("FRONTEND_DIR")
+    or (_FRONTEND_DIST if _FRONTEND_DIST.exists() else ROOT / "frontend")
+)
 
 

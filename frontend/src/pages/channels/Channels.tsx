@@ -1,8 +1,10 @@
 import * as React from "react"
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
-import { api } from "@/lib/api"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { Plus, Plug, Zap } from "lucide-react"
+import { api, errorMessage } from "@/lib/api"
+import { apiClient } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -13,215 +15,200 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { Plus, Mail, Send, ShieldAlert, RefreshCw, Link as LinkIcon, X } from "lucide-react"
-import { useTranslation } from "@/lib/i18n-react"
+import { ChannelCard } from "@/components/channels/ChannelCard"
 import { cn } from "@/lib/utils"
-
-type Channel = {
-  id: number
-  provider: string
-  external_id: string | null
-  display_name: string | null
-  status: string | null
-  active: boolean
-  capabilities: Record<string, any>
-}
-
-const PROVIDERS: { id: string; label: string; icon: React.ElementType; comingSoon: boolean }[] = [
-  { id: "telegram", label: "Telegram", icon: Mail, comingSoon: false },
-  { id: "messenger", label: "Messenger", icon: Send, comingSoon: false },
-  { id: "whatsapp", label: "WhatsApp", icon: ShieldAlert, comingSoon: true },
-  { id: "instagram", label: "Instagram", icon: LinkIcon, comingSoon: true },
-]
+import type { Channel, ProviderMetadata } from "@/types/inbox"
 
 export default function Channels() {
-  const { t } = useTranslation()
   const queryClient = useQueryClient()
+  const [open, setOpen] = React.useState(false)
+  const [selected, setSelected] = React.useState<string>("telegram")
+  const [payload, setPayload] = React.useState<Record<string, string>>({})
+  const [error, setError] = React.useState("")
 
-  const { data: channels = [], isLoading } = useQuery<Channel[]>({
+  const channelsQuery = useQuery<{ items: Channel[] }>({
     queryKey: ["channels"],
-    queryFn: async () => {
-      const res = await api.get("/channels/")
-      return res.data.items
-    },
+    queryFn: async () => (await apiClient.channels.list()).data,
   })
+
+  const providersQuery = useQuery<{ items: ProviderMetadata[] }>({
+    queryKey: ["channel-providers"],
+    queryFn: async () => (await apiClient.channels.providers()).data,
+    staleTime: 5 * 60_000,
+  })
+
+  const providers = providersQuery.data?.items ?? []
+  const selectedProvider = providers.find((provider) => provider.id === selected) ?? providers[0]
 
   const connectMutation = useMutation({
-    mutationFn: async ({ provider, payload }: { provider: string; payload: Record<string, any> }) => {
-      const res = await api.post(`/channels/${provider}/connect`, { payload })
-      return res.data.channel
+    mutationFn: async ({ provider, values }: { provider: string; values: Record<string, string> }) => {
+      const res = await api.post(`/channels/${provider}/connect`, { payload: values })
+      return res.data
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["channels"] })
+      setOpen(false)
+      setPayload({})
+      setError("")
     },
-  })
-
-  const disconnectMutation = useMutation({
-    mutationFn: async (channelId: number) => {
-      await api.post(`/channels/${channelId}/disconnect`)
-      return channelId
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["channels"] })
-    },
+    onError: (mutationError) => setError(errorMessage(mutationError)),
   })
 
   const toggleMutation = useMutation({
-    mutationFn: async (channelId: number) => {
-      const res = await api.post(`/channels/${channelId}/toggle`)
-      return res.data.active
+    mutationFn: async (channel: Channel) => {
+      const res = await api.post(`/channels/${channel.id}/toggle`)
+      return res.data
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["channels"] })
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["channels"] }),
   })
 
-  const statusBadge = (status: string | null) => {
-    switch (status) {
-      case "connected":
-        return <Badge variant="brand">Connected</Badge>
-      case "disconnected":
-        return <Badge variant="destructive">Disconnected</Badge>
-      case "needs_attention":
-        return <Badge variant="secondary">Needs attention</Badge>
-      default:
-        return <Badge variant="outline">Unknown</Badge>
-    }
-  }
+  const disconnectMutation = useMutation({
+    mutationFn: async (channel: Channel) => {
+      await api.post(`/channels/${channel.id}/disconnect`)
+      return channel.id
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["channels"] }),
+  })
+
+  const channels = channelsQuery.data?.items ?? []
+  const labelFor = (provider: string) =>
+    providers.find((item) => item.id === provider)?.label ??
+    provider.charAt(0).toUpperCase() + provider.slice(1)
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Channels</h1>
           <p className="text-neutral-500 dark:text-neutral-400">
             Connect messaging channels to receive customer conversations.
           </p>
         </div>
-        <Dialog>
+
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" /> {t("connect_channel")}
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" /> Connect channel
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Connect a channel</DialogTitle>
-              <DialogDescription>Select a provider and enter credentials.</DialogDescription>
+              <DialogDescription>
+                Choose a provider and enter its credentials. Providers marked “Coming soon” cannot be
+                connected yet.
+              </DialogDescription>
             </DialogHeader>
-            <DialogContent>
+
+            {providersQuery.isLoading ? (
+              <p className="py-6 text-center text-sm text-neutral-500">Loading providers…</p>
+            ) : (
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-neutral-700 mb-2">
-                    Provider
-                  </label>
-                  <div className="flex gap-2">
-                    {PROVIDERS.map((p) => {
-                      const Icon = p.icon
-                      return (
-                        <button
-                          key={p.id}
-                          onClick={() => handleConnect(p.id)}
-                          disabled={p.comingSoon || connectMutation.isPending}
-                          className={cn(
-                            "flex flex-col items-center justify-center gap-2 rounded-lg border p-3 text-sm transition-colors",
-                            p.comingSoon
-                              ? "border-neutral-200 text-neutral-400 opacity-50"
-                              : connectMutation.isPending
-                              ? "border-brand-600 bg-brand-50 text-brand-700"
-                              : "border-neutral-300 text-neutral-700 hover:border-brand-600 hover:bg-brand-50",
+                <div className="grid grid-cols-2 gap-2">
+                  {providers.map((provider) => {
+                    const disabled = !provider.available
+                    return (
+                      <button
+                        key={provider.id}
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => {
+                          setSelected(provider.id)
+                          setPayload({})
+                          setError("")
+                        }}
+                        className={cn(
+                          "rounded-xl border p-3 text-left transition-colors",
+                          selected === provider.id
+                            ? "border-brand-600 bg-brand-50 dark:bg-brand-950/30"
+                            : "border-neutral-200 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-800",
+                          disabled && "cursor-not-allowed opacity-50",
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">{provider.label}</span>
+                          {!provider.available && (
+                            <Badge variant="outline" className="text-[10px]">
+                              Coming soon
+                            </Badge>
                           )}
-                        >
-                          <Icon className="h-5 w-5" />
-                          <span>{p.label}</span>
-                          {p.comingSoon && <span className="text-xs mt-1 text-neutral-400">Coming soon</span>}
-                        </button>
-                      )
-                    })}
+                        </div>
+                        <p className="mt-1 text-xs text-neutral-500">{provider.description}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {selectedProvider?.available && (
+                  <div className="space-y-2">
+                    {selectedProvider.fields.map((field) => (
+                      <Input
+                        key={field.key}
+                        label={field.label}
+                        type={field.type === "password" ? "password" : "text"}
+                        value={payload[field.key] || ""}
+                        onChange={(event) =>
+                          setPayload((prev) => ({ ...prev, [field.key]: event.target.value }))
+                        }
+                      />
+                    ))}
+                    {error && <p className="text-xs text-red-600">{error}</p>}
                   </div>
-                </div>
-                <div className="text-xs text-neutral-500 mt-2">
-                  Enter your Telegram bot token or Messenger page access token.
-                </div>
+                )}
               </div>
-            </DialogContent>
+            )}
+
             <DialogFooter>
-              <Button variant="outline" onClick={() => connectMutation.reset()}>
+              <Button variant="outline" onClick={() => setOpen(false)}>
                 Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  if (!selectedProvider) return
+                  connectMutation.mutate({ provider: selectedProvider.id, values: payload })
+                }}
+                disabled={!selectedProvider?.available || connectMutation.isPending}
+                isLoading={connectMutation.isPending}
+                className="gap-1"
+              >
+                <Plug className="h-4 w-4" /> Connect
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
 
-      {isLoading ? (
-        <div className="h-64 flex items-center justify-center">
+      {channelsQuery.isLoading ? (
+        <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
         </div>
       ) : channels.length === 0 ? (
-        <Card className="text-center py-12">
-          <CardContent>
-            <Mail className="mx-auto mb-4 h-12 w-12 text-neutral-400" />
-            <h3 className="text-lg font-semibold text-neutral-900">No channels connected</h3>
-            <p className="text-neutral-500 mt-2">
-              Connect your first channel to start receiving customer messages.
-            </p>
-            <Button className="mt-4" onClick={() => connectMutation.reset()}>
-              Connect channel
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="rounded-xl border border-dashed border-neutral-300 bg-white py-14 text-center dark:border-neutral-700 dark:bg-neutral-900">
+          <Zap className="mx-auto mb-3 h-10 w-10 text-neutral-300" />
+          <h3 className="text-base font-semibold text-neutral-800 dark:text-neutral-100">
+            No channels connected
+          </h3>
+          <p className="mt-1 text-sm text-neutral-500">
+            Connect your first channel to start receiving customer messages.
+          </p>
+          <Button className="mt-4" onClick={() => setOpen(true)}>
+            Connect channel
+          </Button>
+        </div>
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {channels.map((channel) => (
-            <Card key={channel.id}>
-              <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-neutral-100 flex items-center justify-center text-neutral-600">
-                    <Mail className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-neutral-900">
-                      {channel.display_name || channel.provider}
-                    </h3>
-                    <p className="text-sm text-neutral-500">{channel.provider}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  {statusBadge(channel.status)}
-                  <Badge variant={channel.active ? "secondary" : "outline"}>
-                    {channel.active ? "Active" : "Inactive"}
-                  </Badge>
-                  <button
-                    onClick={() => toggleMutation.mutate(channel.id)}
-                    disabled={toggleMutation.isPending}
-                    className="text-xs text-brand-600 hover:underline"
-                  >
-                    {channel.active ? "Deactivate" : "Activate"}
-                  </button>
-                  <button
-                    onClick={() => disconnectMutation.mutate(channel.id)}
-                    disabled={disconnectMutation.isPending}
-                    className="text-xs text-red-500 hover:underline"
-                  >
-                    Disconnect
-                  </button>
-                </div>
-              </CardContent>
-              <CardFooter className="bg-transparent p-4 pt-0 border-t">
-                <div className="flex items-center gap-2 text-xs text-neutral-500">
-                  <span>Webhook: Ready</span>
-                </div>
-              </CardFooter>
-            </Card>
+            <ChannelCard
+              key={channel.id}
+              channel={channel}
+              label={labelFor(channel.provider)}
+              pending={toggleMutation.isPending || disconnectMutation.isPending}
+              onToggle={(value) => toggleMutation.mutate(value)}
+              onDisconnect={(value) => disconnectMutation.mutate(value)}
+            />
           ))}
         </div>
-      }
+      )}
     </div>
   )
-}
-
-function handleConnect(provider: string) {
-  // Placeholder - in a real implementation this would open a provider-specific connect flow
-  console.log("Connect", provider)
 }

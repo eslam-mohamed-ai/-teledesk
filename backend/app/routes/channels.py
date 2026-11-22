@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.channels.metadata import providers as provider_metadata
 from app.channels.registry import get as get_adapter
 from app.channels.types import EventKind
 from app.database import get_db
@@ -67,6 +68,12 @@ def list_channels(
         select(Channel).where(Channel.company_id == c.id).order_by(Channel.id.desc())
     ).all()
     return {"items": [_channel_out(r) for r in rows]}
+
+
+@router.get("/providers")
+def list_providers():
+    """Provider metadata that drives the Channels page."""
+    return {"items": provider_metadata()}
 
 
 @router.post("/{provider}/connect", status_code=status.HTTP_201_CREATED)

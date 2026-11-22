@@ -2,9 +2,9 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from app.config import FRONTEND_DIR
+from app.static import SPAFiles
 from app.database import init_db
 from app.logging_config import configure_logging
 from app.middleware import RequestIDMiddleware
@@ -55,4 +55,8 @@ app.include_router(channels.webhook_router)
 app.include_router(health.router)
 
 # الواجهة تتخدم من نفس السيرفر (لازم تتحط آخر حاجة)
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")
+# SPA fallback: unknown non-API paths return index.html so client-side routes
+# like /inbox survive a hard refresh. Skipped when no build is present
+# (e.g. backend-only test runs).
+if (FRONTEND_DIR / "index.html").exists():
+    app.mount("/", SPAFiles(directory=FRONTEND_DIR, html=True), name="frontend")

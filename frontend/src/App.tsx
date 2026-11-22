@@ -21,20 +21,35 @@ const Onboarding = React.lazy(() => import("@/pages/onboarding/Onboarding"))
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
-  if (isLoading) return null
+  if (isLoading) return <Splash />
   if (!isAuthenticated) return <Navigate to="/auth/login" replace />
   return <>{children}</>
 }
 
 function GuestRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuthStore()
-  if (isLoading) return null
+  if (isLoading) return <Splash />
   if (isAuthenticated) return <Navigate to="/inbox" replace />
   return <>{children}</>
 }
 
+function Splash() {
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-neutral-50">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+        <p className="text-sm text-neutral-500">Loading TeleDesk…</p>
+      </div>
+    </div>
+  )
+}
+
 export function App() {
-  const { user } = useAuthStore()
+  const bootstrap = useAuthStore((s) => s.bootstrap)
+
+  React.useEffect(() => {
+    void bootstrap()
+  }, [bootstrap])
 
   return (
     <BrowserRouter>

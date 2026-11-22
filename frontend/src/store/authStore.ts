@@ -1,6 +1,7 @@
 import { create } from "zustand"
 import { persist, createJSONStorage } from "zustand/middleware"
 import i18n from "../lib/i18n"
+import { api } from "../lib/api"
 
 export type User = {
   id: number
@@ -24,15 +25,15 @@ export type Company = {
 type AuthState = {
   user: User | null
   company: Company | null
-  token: string | null
   isAuthenticated: boolean
   isLoading: boolean
-  setAuth: (user: User, company: Company, token: string) => void
+  language: string
+  setAuth: (user: User, company: Company | null) => void
   setCompany: (company: Company) => void
   updateUser: (partial: Partial<User>) => void
   logout: () => void
   setLanguage: (lang: string) => void
-  language: string
+  bootstrap: () => Promise<void>
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -40,28 +41,44 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       company: null,
-      token: null,
       isAuthenticated: false,
       isLoading: true,
       language: "en",
-      setAuth: (user, company, token) =>
-        set({ user, company, token, isAuthenticated: true, isLoading: false }),
+      setAuth: (user, company) =>
+        set({ user, company, isAuthenticated: true, isLoading: false }),
       setCompany: (company) => set({ company }),
       updateUser: (partial) =>
         set((state) => ({ user: state.user ? { ...state.user, ...partial } : null })),
       logout: () =>
-        set({ user: null, company: null, token: null, isAuthenticated: false, isLoading: false }),
+        set({ user: null, company: null, isAuthenticated: false, isLoading: false }),
       setLanguage: (lang) => {
         i18n.changeLanguage(lang)
         document.documentElement.dir = lang === "ar" ? "rtl" : "ltr"
         document.documentElement.lang = lang
         set({ language: lang })
       },
+      // Restore the session from HttpOnly cookies. The 401 interceptor in
+      // lib/api.ts silently refreshes an expired access cookie.
+      bootstrap: async () => {
+        try {
+          const { data: user } = await api.get<User>("/auth/me")
+          let company: Company | null = null
+          try {
+            company = (await api.get<Company>("/company")).data
+          } catch {
+            company = null
+          }
+          set({ user, company, isAuthenticated: true, isLoading: false })
+        } catch {
+          set({ user: null, company: null, isAuthenticated: false, isLoading: false })
+        }
+      },
     }),
     {
       name: "teledesk-auth",
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ user: state.user, company: state.company, token: state.token, language: state.language }),
+      // NOTE: no token is persisted. Sessions are cookie-based.
+      partialize: (state) => ({ user: state.user, company: state.company, language: state.language }),
     },
-  )
+  ),
 )
