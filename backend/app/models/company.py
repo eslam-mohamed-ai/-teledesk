@@ -8,11 +8,18 @@ from app.database import Base
 
 if TYPE_CHECKING:
     from .bot import Bot
+    from .channel import Channel
+    from .contact import Contact
     from .chunk import Chunk
     from .conversation import Conversation
     from .document import Document
-    from .message import Message
+    from .invitation import Invitation
+    from .tag import Tag
     from .user import User
+    from .message import Message
+    from .audit_log import AuditLog
+    from .canned_reply import CannedReply
+    from .contact_field_definition import ContactFieldDefinition
 
 
 class Company(Base):
@@ -38,3 +45,12 @@ class Company(Base):
     messages: Mapped[list["Message"]] = relationship(back_populates="company")
     documents: Mapped[list["Document"]] = relationship(back_populates="company")
     chunks: Mapped[list["Chunk"]] = relationship(back_populates="company")
+    channels: Mapped[list["Channel"]] = relationship(back_populates="company", passive_deletes="all")
+    contacts: Mapped[list["Contact"]] = relationship(back_populates="company", passive_deletes="all")
+    tags: Mapped[list["Tag"]] = relationship(back_populates="company", passive_deletes="all")
+    invitations: Mapped[list["Invitation"]] = relationship(back_populates="company", passive_deletes="all")
+    audit_logs: Mapped[list["AuditLog"]] = relationship(back_populates="company", passive_deletes="all")
+    canned_replies: Mapped[list["CannedReply"]] = relationship(back_populates="company", passive_deletes="all")
+    contact_field_definitions: Mapped[list["ContactFieldDefinition"]] = relationship(
+        back_populates="company", passive_deletes="all",
+    )
