@@ -1,50 +1,136 @@
-# TeleDesk Backend
+# TeleDesk
 
-## التشغيل (Windows / Mac / Linux)
+Omnichannel customer-messaging platform: Telegram, Facebook Messenger, and any
+custom channel through a single adapter file. AI-grounded replies, RBAC, tenant
+isolation, encrypted credentials, document knowledge base, and a realtime
+inbox.
+
+## Architecture
+
+| Layer | Technology |
+|-------|------------|
+| API | FastAPI + SQLAlchemy + Alembic |
+| Background jobs | Celery + Redis (queues: `default`, `turns`, `outbound`) |
+| Database | PostgreSQL 16 + pgvector |
+| Object storage | MinIO / S3-compatible (SeaweedFS in compose) |
+| Frontend | Vite + React (served by the API) |
+| AI | Google Gemini (grounded on company documents) |
+| Tests | pytest (backend), vitest + Playwright (frontend) |
+
+## Quick start (Docker Compose)
+
 ```bash
-# 1) الأساسيات (Postgres + Redis + MinIO)
-docker compose up -d
+# 1) Clone and configure
+git clone <repo> teledesk
+cd teledesk
+cp .env.example .env
+# Edit .env: set GEMINI_API_KEY, ENCRYPTION_KEY, JWT_SECRET, DATABASE_URL, REDIS_URL, MINIO_*
 
-# 2) المفاتيح
-cp .env.example .env        # وبعدين املا GEMINI_API_KEY و ENCRYPTION_KEY
+# 2) Bring up the stack (postgres, redis, minio, backend, worker)
+docker compose up -d --profile dev
 
-# 3) المكتبات
+# 3) Run migrations (auto-run via the `migrate` service; or manually)
+docker compose run --rm migrate
+
+# 4) Open the API docs
+open http://localhost:8000/docs
+```
+
+The `backend` service runs as a non-root user (`appuser`) and exposes a liveness
+healthcheck at `/api/healthz` and a readiness probe at `/api/readyz`.
+
+### Without Docker (local dev)
+
+```bash
 cd backend
 python -m venv venv
-venv\Scripts\activate       # Windows  |  source venv/bin/activate  (Mac/Linux)
+# Windows: venv\Scripts\activate   |   Mac/Linux: source venv/bin/activate
 pip install -r requirements.txt
+cp ../.env.example ../.env   # then fill in GEMINI_API_KEY, ENCRYPTION_KEY, JWT_SECRET
 
-# 4) الـ Backend (Terminal 1)
+python -m alembic -c alembic.ini upgrade head
 uvicorn app.main:app --reload
-
-# 5) الـ Worker (Terminal 2)  -- على Windows لازم --pool=solo
+# Terminal 2:
 celery -A app.workers.celery_app worker --loglevel=info --pool=solo
-
-# 6) النفق لتليجرام (Terminal 3)
-ngrok http 8000             # حط عنوان https في PUBLIC_BASE_URL وأعد تشغيل uvicorn
 ```
-افتح http://localhost:8000/docs لتجربة الـ API.
 
-## تجربة سريعة من /docs
-1. `POST /api/auth/demo` ← خد الـ token ← Authorize (Bearer).
-2. `POST /api/documents/text` ← ضيف سياسة أو أسعار، وانتظر حالة `ready` في `GET /api/documents`.
-3. `POST /api/bots/test` {"question": "..."} ← جرّب الرد من غير تليجرام.
-4. `POST /api/bots/connect` بتوكن من @BotFather ← ابعت رسالة للبوت.
+Open `http://localhost:8000/docs`.
 
-## الاختبارات
+## Environment variables
+
+Copy `.env.example` to `.env`. Required at minimum:
+
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string |
+| `REDIS_URL` | Redis connection string |
+| `MINIO_ENDPOINT` | S3-compatible endpoint |
+| `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | Object-storage credentials |
+| `GEMINI_API_KEY` | Google Gemini for AI replies |
+| `JWT_SECRET` | Signing access tokens |
+| `ENCRYPTION_KEY` / `ENCRYPTION_KEY_VERSION` / `ENCRYPTION_KEYS` | Credential encryption keyring |
+| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins |
+| `PUBLIC_BASE_URL` | Public URL for webhook/verify links |
+
+See `.env.example` for the full list and defaults.
+
+## Connecting a channel
+
+TeleDesk accepts new channels through a single adapter file plus one registry
+line — no pipeline, route, or model changes. See `docs/ADDING_A_CHANNEL.md`.
+
+Bundled adapters:
+- `telegram` — `docs/TELEGRAM_SETUP.md`
+- `messenger` (Facebook) — `docs/MESSENGER_SETUP.md`
+
+Each channel connects via `POST /api/channels/{provider}/connect`; inbound
+messages arrive at `POST /webhooks/{provider}/{channel_id}`.
+
+## Testing
+
+Backend (requires a real PostgreSQL via `TEST_DATABASE_URL`):
+
 ```bash
 pip install -r backend/requirements-dev.txt
-make test
+make test            # lint + mypy + pytest
+# or the full CI suite in Docker:
+docker compose run --rm test
 ```
 
-## قاعدة البيانات والترحيلات
-- `make migrate` يطبق ترحيلات Alembic على قاعدة البيانات المحددة في `.env`.
-- `docker compose up` يشغّل خدمة `migrate` قبل الـ API والـ worker.
-- عند استخدام قاعدة موجودة من إصدار سابق، افحص الـ schema وخذ نسخة احتياطية
-  قبل ختم baseline؛ الأمر لا ينشئ الجداول أو يتحقق منها:
-  `make stamp-existing CONFIRM_EXISTING_SCHEMA=yes`
+Frontend:
 
-## ملاحظات قبل الإطلاق التجاري
-- Gemini المجاني: Google ممكن تستخدم البيانات، فانقل للخطة المدفوعة.
-- `POST /api/billing/plan` بيغيّر الخطة من غير دفع (للتطوير بس). اربط Stripe/Paymob.
-- تغييرات الـ schema تُدار بترحيلات Alembic؛ التطبيق لا ينشئ الجداول عند التشغيل.
+```bash
+cd frontend
+npm ci
+npm run lint
+npm run typecheck
+npm run test
+npm run test:e2e
+```
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs:
+- `checks` job: ruff, mypy, frontend lint/typecheck, alembic upgrade, pytest
+- `audit` job: `pip-audit` (Python) and `npm audit` (Node)
+
+## Security
+
+See `docs/SECURITY.md` for the threat model, SSRF protection, upload scanning,
+key rotation, and CORS/headers policy.
+
+## Operations
+
+See `docs/RUNBOOK.md` for health checks, failed-jobs review, log redaction, and
+incident response.
+
+## Docs index
+
+- `docs/SECURITY.md` — security controls and hardening
+- `docs/API.md` — API reference and integration notes
+- `docs/RUNBOOK.md` — operations, health checks, incident response
+- `docs/ADDING_A_CHANNEL.md` — adding a new channel adapter
+- `docs/TELEGRAM_SETUP.md` — Telegram channel setup
+- `docs/MESSENGER_SETUP.md` — Facebook Messenger setup
+- `docs/ARCHITECTURE.md` — system design
+- `docs/DECISIONS.md` — architectural decision records

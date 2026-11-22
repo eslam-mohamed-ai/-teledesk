@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
 from app.deps import current_company, require_role
-from app.models import Company, Invitation, User
+from app.models import Company, Invitation, Message, User
 from app.services.audit import audit_from_request
 from app.services.auth import hash_token
 from app.services.email import get_email_sender, invitation_email_template
@@ -282,3 +282,59 @@ def remove_member(
         log.exception("audit log write failed for member removal")
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# Failed jobs (dead-letter) view
+# ---------------------------------------------------------------------------
+
+
+class FailedJobOut(BaseModel):
+    id: int
+    conversation_id: int
+    channel_id: int | None
+    direction: str | None
+    sender_type: str | None
+    content: str
+    error_code: str | None
+    error_message: str | None
+    created_at: str
+
+
+@router.get("/failed-jobs", response_model=list[FailedJobOut], tags=["team"])
+def failed_jobs(
+    limit: int = 50,
+    offset: int = 0,
+    c: Company = Depends(current_company),
+    actor: User = Depends(require_role("admin", "owner")),
+    db: Session = Depends(get_db),
+):
+    if limit < 1 or limit > 200:
+        raise HTTPException(400, "limit يجب أن يكون بين 1 و 200")
+    if offset < 0:
+        raise HTTPException(400, "offset غير صالح")
+
+    rows = (
+        db.query(Message)
+        .filter(Message.company_id == c.id, Message.delivery_status == "failed")
+        .order_by(Message.created_at.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+
+    return [
+        FailedJobOut(
+            id=m.id,
+            conversation_id=m.conversation_id,
+            channel_id=m.channel_id,
+            direction=m.direction,
+            sender_type=m.sender_type,
+            content=m.content,
+            error_code=m.error_code,
+            error_message=m.error_message,
+            created_at=m.created_at.isoformat(),
+        )
+        for m in rows
+    ]
+

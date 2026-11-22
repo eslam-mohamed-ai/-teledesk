@@ -36,8 +36,8 @@ class Conversation(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id"), index=True)
-    bot_id: Mapped[int] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True)
-    tg_chat_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    bot_id: Mapped[int | None] = mapped_column(ForeignKey("bots.id", ondelete="CASCADE"), index=True, nullable=True)
+    tg_chat_id: Mapped[int | None] = mapped_column(BigInteger, index=True, nullable=True)
     channel_id: Mapped[int | None] = mapped_column(ForeignKey("channels.id", ondelete="SET NULL"), index=True, nullable=True)
     contact_id: Mapped[int | None] = mapped_column(ForeignKey("contacts.id", ondelete="SET NULL"), index=True, nullable=True)
     assignee_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True)
