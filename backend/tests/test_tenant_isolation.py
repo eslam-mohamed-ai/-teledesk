@@ -10,15 +10,10 @@ conversations, channels, or documents.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from app.config import settings
-from app.database import Base
 from app.deps import hash_password
 from app.models import (
     Channel,
@@ -26,8 +21,6 @@ from app.models import (
     Contact,
     Conversation,
     Document,
-    Invitation,
-    Message,
     User,
 )
 
