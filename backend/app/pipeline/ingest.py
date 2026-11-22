@@ -21,7 +21,6 @@ from app.models import (
     ProcessedEvent,
 )
 from app.pipeline.realtime import publish
-from app.services.lead_capture import handle_lead_capture
 
 log = logging.getLogger("teledesk.pipeline.ingest")
 
@@ -163,34 +162,24 @@ async def ingest_inbound(db: Session, channel: Channel, event: InboundEvent) -> 
         db.add(conv)
         db.flush()
 
-    # --- Lead capture: extract values, refuse sensitive data, track next question ---
-    lead_capture_next_question: str | None = None
+    # --- Lead capture: flag for async processing in the turn task (never block webhook on Gemini) ---
     if company.lead_capture_enabled and text:
-        try:
-            refusal = await handle_lead_capture(db, company, contact, text)
-        except Exception:
-            log.exception("lead capture handling failed")
-            refusal = None
-        if refusal:
-            from app.services.lead_capture import sensitive_data_detected
+        from app.services.lead_capture import sensitive_data_detected
 
-            sensitive = sensitive_data_detected(text)
-            if sensitive:
-                # Replace sensitive content with a refusal notice and write a timeline note.
-                text = f"[تم حجب محتوى حساس: {sensitive}]"
-                db.add(
-                    InternalNote(
-                        conversation_id=conv.id,
-                        user_id=None,
-                        body=f"تم رفض تخزين بيانات حساسة من العميل: {sensitive}",
-                    )
+        sensitive = sensitive_data_detected(text)
+        if sensitive:
+            # Replace sensitive content with a refusal notice and write a timeline note.
+            text = f"[تم حجب محتوى حساس: {sensitive}]"
+            db.add(
+                InternalNote(
+                    conversation_id=conv.id,
+                    user_id=None,
+                    body=f"تم رفض تخزين بيانات حساسة من العميل: {sensitive}",
                 )
-            # Store the lead-capture prompt (if any) so the turn processor can include it in the AI reply.
-            lead_capture_next_question = refusal if not sensitive else None
-    # Persist any next_question on the contact for the turn processor.
-    if lead_capture_next_question:
+            )
         fields = dict(contact.custom_fields or {})
-        fields["lead_capture_next_question"] = lead_capture_next_question
+        fields["lead_capture_pending"] = True
+        fields["lead_capture_raw_text"] = text
         contact.custom_fields = fields
         db.add(contact)
 

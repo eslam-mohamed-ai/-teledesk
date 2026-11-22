@@ -1,13 +1,14 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import current_company, require_role
 from app.models import Company, User
+from app.services.audit import audit_from_request
 from app.services.plans import PLANS, usage
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -41,8 +42,10 @@ def billing(
 @router.post("/plan")
 def change_plan(
     body: PlanIn,
+    request: Request,
     c: Company = Depends(current_company),
-    _admin: User = Depends(require_role("admin", "owner")),
+    actor: User = Depends(require_role("admin", "owner")),
+    db: Session = Depends(get_db),
 ):
     new_plan = body.plan.strip().lower()
 
@@ -51,6 +54,19 @@ def change_plan(
             status_code=400,
             detail="خطة غير معروفة",
         )
+
+    try:
+        audit_from_request(
+            db=db,
+            action="billing.plan_change",
+            target=str(c.id),
+            metadata={"requested_plan": new_plan},
+            user=actor,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for plan change")
 
     log.warning(
         "Plan change blocked: company_id=%s requested_plan=%s",

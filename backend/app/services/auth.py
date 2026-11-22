@@ -17,9 +17,9 @@ import jwt
 from redis import Redis
 
 from app.config import settings
-from app.database import SessionLocal
 from app.deps import verify_password
 from app.models import RefreshToken, User
+from sqlalchemy.orm import Session
 
 ACCESS_TOKEN_TTL_SECONDS = 15 * 60
 REFRESH_TOKEN_TTL_DAYS = 30
@@ -108,7 +108,7 @@ def _now() -> datetime:
 
 
 def create_refresh_token(
-    db: SessionLocal,
+    db: Session,
     user: User,
     device_info: str | None = None,
     ip_address: str | None = None,
@@ -131,7 +131,7 @@ def create_refresh_token(
 
 
 def rotate_refresh_token(
-    db: SessionLocal,
+    db: Session,
     used_record: RefreshToken,
     device_info: str | None = None,
     ip_address: str | None = None,
@@ -173,7 +173,7 @@ def rotate_refresh_token(
     return plain_token, new_record
 
 
-def revoke_refresh_token(db: SessionLocal, token_hash: str) -> None:
+def revoke_refresh_token(db: Session, token_hash: str) -> None:
     record = db.scalar(
         __import__("sqlalchemy").select(RefreshToken).where(
             RefreshToken.token_hash == token_hash
@@ -184,7 +184,7 @@ def revoke_refresh_token(db: SessionLocal, token_hash: str) -> None:
         db.add(record)
 
 
-def revoke_all_user_tokens(db: SessionLocal, user_id: int) -> None:
+def revoke_all_user_tokens(db: Session, user_id: int) -> None:
     db.query(RefreshToken).filter(RefreshToken.user_id == user_id).update(
         {RefreshToken.revoked_at: _now()}, synchronize_session=False
     )
@@ -206,7 +206,7 @@ def validate_password_strength(password: str) -> list[str]:
     return errors
 
 
-def authenticate_user(db: SessionLocal, email: str, password: str) -> User | None:
+def authenticate_user(db: Session, email: str, password: str) -> User | None:
     """Constant-time-ish authentication. Returns None on any failure."""
     email = (email or "").strip().lower()
     user = db.scalar(__import__("sqlalchemy").select(User).where(User.email == email))

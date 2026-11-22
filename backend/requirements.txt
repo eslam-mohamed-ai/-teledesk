@@ -16,3 +16,4 @@ cryptography
 google-genai
 httpx
 pyjwt
+phonenumbers

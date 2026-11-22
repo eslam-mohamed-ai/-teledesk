@@ -100,6 +100,30 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  test:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_DOCKER:-postgresql+psycopg2://teledesk:teledesk@postgres:5432/teledesk}
+      TEST_DATABASE_URL: postgresql+psycopg2://teledesk:teledesk@postgres:5432/teledesk_test
+      REDIS_URL: redis://redis:6379/0
+      MINIO_ENDPOINT: http://minio:8333
+      APP_ENV: test
+    command: >
+      sh -c "
+        psql -h postgres -U teledesk -d teledesk -c 'CREATE DATABASE teledesk_test;' 2>/dev/null || true &&
+        cd backend &&
+        pytest tests/ -v
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pgdata:
   miniodata:

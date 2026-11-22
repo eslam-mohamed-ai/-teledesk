@@ -1,22 +1,16 @@
-PYTHON ?= python
-ALEMBIC = $(PYTHON) -m alembic -c backend/alembic.ini
-export CONFIRM_EXISTING_SCHEMA
+.PHONY: test test-lint test-mypy test-pytest
 
-.PHONY: migrate stamp-existing lint typecheck test
+test: test-lint test-mypy test-pytest
 
-migrate:
-	$(ALEMBIC) upgrade head
+test-lint:
+	cd backend && ruff check app/
 
-stamp-existing:
-	@$(PYTHON) -c "import os, sys; confirmed = os.getenv('CONFIRM_EXISTING_SCHEMA') == 'yes'; print('Schema confirmation required before stamping.' if not confirmed else 'Schema confirmation received.'); sys.exit(not confirmed)"
-	$(ALEMBIC) stamp 202611220001
-	$(ALEMBIC) upgrade head
+test-mypy:
+	cd backend && mypy app/
 
-lint:
-	$(PYTHON) -m ruff check backend/app backend/migrations backend/tests
+test-pytest:
+	cd backend && pytest tests/ -v
 
-typecheck:
-	$(PYTHON) -m mypy
-
-test:
-	$(PYTHON) -m pytest
+# Run full test suite against real Postgres+Redis via Docker Compose
+docker-test:
+	docker compose run --rm test

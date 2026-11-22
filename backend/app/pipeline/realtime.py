@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 from redis import Redis
 
@@ -66,7 +66,7 @@ class Subscriber:
         self._pubsub = self._redis.pubsub()
         await asyncio.to_thread(self._pubsub.subscribe, _channel(self.company_id))
 
-    async def __aiter__(self):
+    def __aiter__(self) -> AsyncIterator[dict]:
         return self
 
     async def __anext__(self) -> dict:

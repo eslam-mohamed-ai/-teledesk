@@ -22,6 +22,7 @@ from app.database import get_db
 from app.deps import current_company, require_role
 from app.models import Channel, Company, User
 from app.pipeline.ingest import ingest_inbound
+from app.services.audit import audit_from_request
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
 log = logging.getLogger("teledesk.channels")
@@ -72,9 +73,10 @@ def list_channels(
 async def connect_channel(
     provider: str,
     body: ChannelConnectIn,
+    request: Request,
     c: Company = Depends(current_company),
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_role("admin", "owner")),
+    actor: User = Depends(require_role("admin", "owner")),
 ):
     adapter_cls = get_adapter(provider)
     if adapter_cls is None:
@@ -119,15 +121,30 @@ async def connect_channel(
     db.add(channel)
     db.commit()
     db.refresh(channel)
+
+    try:
+        audit_from_request(
+            db,
+            action="channel.connect",
+            target=str(channel.id),
+            metadata={"provider": channel.provider, "external_id": channel.external_id},
+            user=actor,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for channel connect")
+
     return {"channel": _channel_out(channel)}
 
 
 @router.post("/{channel_id}/disconnect")
 def disconnect_channel(
     channel_id: int,
+    request: Request,
     c: Company = Depends(current_company),
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_role("admin", "owner")),
+    actor: User = Depends(require_role("admin", "owner")),
 ):
     channel = db.scalar(
         select(Channel).where(Channel.id == channel_id, Channel.company_id == c.id)
@@ -147,14 +164,30 @@ def disconnect_channel(
     channel.active = False
     db.add(channel)
     db.commit()
+
+    try:
+        audit_from_request(
+            db,
+            action="channel.disconnect",
+            target=str(channel_id),
+            metadata={"provider": channel.provider},
+            user=actor,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for channel disconnect")
+
     return {"ok": True}
 
 
 @router.post("/{channel_id}/toggle")
 def toggle_channel(
     channel_id: int,
+    request: Request,
     c: Company = Depends(current_company),
     db: Session = Depends(get_db),
+    actor: User = Depends(require_role("admin", "owner")),
 ):
     channel = db.scalar(
         select(Channel).where(Channel.id == channel_id, Channel.company_id == c.id)
@@ -164,6 +197,20 @@ def toggle_channel(
     channel.active = not channel.active
     db.add(channel)
     db.commit()
+
+    try:
+        audit_from_request(
+            db,
+            action="channel.toggle",
+            target=str(channel_id),
+            metadata={"active": channel.active},
+            user=actor,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for channel toggle")
+
     return {"active": channel.active}
 
 

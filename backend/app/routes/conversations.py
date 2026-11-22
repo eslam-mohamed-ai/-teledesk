@@ -12,7 +12,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import current_company
+from app.deps import current_company, current_user
 from app.models import (
     Channel,
     Company,
@@ -135,6 +135,7 @@ def list_conversations(
     before: str | None = Query(default=None, description="cursor: conversation id"),
     limit: int = Query(default=50, le=100),
     c: Company = Depends(current_company),
+    actor: User = Depends(current_user),
     db: Session = Depends(get_db),
 ):
     base = select(Conversation).where(Conversation.company_id == c.id)
@@ -143,8 +144,7 @@ def list_conversations(
         base = base.where(Conversation.status == status)
     if assignee != "all":
         if assignee == "me":
-            # current_user is not injected here; keep simple: unassigned or set
-            base = base.where(Conversation.assignee_user_id.is_(None))
+            base = base.where(Conversation.assignee_user_id == actor.id)
         elif assignee == "unassigned":
             base = base.where(Conversation.assignee_user_id.is_(None))
         else:

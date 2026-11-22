@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.pipeline.outbound import enqueue_send
 from app.services.chat import HANDOFF, is_arabic, reply_to
+from app.services.lead_capture import handle_lead_capture
 from app.services.plans import usage
 from app.workers.celery_app import celery
 
@@ -49,6 +50,7 @@ def process_conversation_turn(self, conversation_id: str) -> dict:
         company = db.get(Company, conv.company_id)
         if not company:
             return {"status": "error", "error": "company not found"}
+        assert company is not None
 
         channel = db.get(Channel, conv.channel_id) if conv.channel_id else None
 
@@ -130,6 +132,24 @@ def process_conversation_turn(self, conversation_id: str) -> dict:
         db.add(conv)
         db.flush()
 
+        # 6b) Lead capture: field extraction via Gemini (safe to block here; we're in Celery).
+        contact = db.get(Contact, conv.contact_id) if conv.contact_id else None
+        lead_capture_answer: str | None = None
+        if contact and contact.custom_fields and contact.custom_fields.get("lead_capture_pending"):
+            assert company is not None
+            raw_text = contact.custom_fields.get("lead_capture_raw_text") or text
+            try:
+                lead_capture_answer = handle_lead_capture(db, company, contact, raw_text)
+            except Exception:
+                log.exception("lead capture extraction failed for conversation_id=%s", conv.id)
+            # Clear the pending flag so we don't re-process.
+            if contact.custom_fields:
+                fields = dict(contact.custom_fields)
+                fields.pop("lead_capture_pending", None)
+                fields.pop("lead_capture_raw_text", None)
+                contact.custom_fields = fields
+                db.add(contact)
+
         # 7) AI reply.
         t0 = time.time()
         try:
@@ -170,18 +190,8 @@ def process_conversation_turn(self, conversation_id: str) -> dict:
         answer = result.get("answer") or "مش قادر أجاوب على السؤال ده حاليًا."
 
         # --- Lead capture: append the next field question (one at a time) ---
-        contact = db.get(Contact, conv.contact_id) if conv.contact_id else None
-        lead_question = None
-        if contact and contact.custom_fields:
-            lead_question = contact.custom_fields.get("lead_capture_next_question")
-            if lead_question:
-                fields = dict(contact.custom_fields)
-                fields.pop("lead_capture_next_question", None)
-                contact.custom_fields = fields
-                db.add(contact)
-
-        if lead_question:
-            answer = f"{answer}\n\n{lead_question}"
+        if lead_capture_answer:
+            answer = f"{answer}\n\n{lead_capture_answer}"
 
         # 8) Persist AI message as `queued` FIRST (delivery status tracked separately).
         ai_msg = Message(
@@ -226,12 +236,13 @@ def process_conversation_turn(self, conversation_id: str) -> dict:
                 )
             )
 
-        if result.get("source"):
+        source = result.get("source")
+        if source:
             db.execute(
                 update(Document)
                 .where(
                     Document.company_id == company.id,
-                    Document.name == result["source"],
+                    Document.name == str(source),
                 )
                 .values(uses=Document.uses + 1)
             )

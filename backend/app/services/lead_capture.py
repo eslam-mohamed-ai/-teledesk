@@ -7,10 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
-try:
-    import phonenumbers
-except Exception:  # pragma: no cover - optional dependency
-    phonenumbers = None
+import phonenumbers
 
 from app.models import Company, Contact, ContactFieldDefinition
 from app.services.ai import generate_reply
@@ -32,8 +29,6 @@ class FieldState:
 
 
 def _normalize_phone(value: str) -> str | None:
-    if phonenumbers is None:
-        return value
     try:
         parsed = phonenumbers.parse(value, None)
         if phonenumbers.is_valid_number(parsed):
@@ -106,7 +101,7 @@ def missing_ask_fields(
     return result
 
 
-async def handle_lead_capture(
+def handle_lead_capture(
     db,
     company: Company,
     contact: Contact,
@@ -139,7 +134,7 @@ async def handle_lead_capture(
 
     # 2) Try to extract a value for the first missing field from this message.
     first = pending[0]
-    extracted = await _extract_value(first, customer_text, company, contact, db)
+    extracted = _extract_value(first, customer_text, company, contact, db)
     if extracted is not None:
         _mark_collected(db, contact, first.key, extracted)
         db.flush()
@@ -160,7 +155,7 @@ def _ask_question(field: FieldState) -> str:
     return prompt
 
 
-async def _extract_value(
+def _extract_value(
     field: FieldState,
     customer_text: str,
     company: Company,

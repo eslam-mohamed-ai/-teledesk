@@ -63,7 +63,7 @@ def _reset_db(engine) -> None:
 def alembic_cfg():
     dsn = _dsn()
     if not dsn:
-        pytest.skip("Set TEST_DATABASE_URL to run migration tests")
+        pytest.fail("TEST_DATABASE_URL is required for migration tests. Run: make test")
     return _alembic_cfg(dsn)
 
 

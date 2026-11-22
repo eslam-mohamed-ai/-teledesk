@@ -37,7 +37,7 @@ def client():
 def test_engine():
     database_url = os.environ.get("TEST_DATABASE_URL")
     if not database_url:
-        pytest.skip("Set TEST_DATABASE_URL to an isolated PostgreSQL test database")
+        pytest.fail("TEST_DATABASE_URL is required for DB-backed tests. Run: make test")
 
     url = make_url(database_url)
     if url.get_backend_name() != "postgresql" or not (

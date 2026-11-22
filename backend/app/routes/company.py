@@ -1,13 +1,14 @@
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.deps import current_company, require_role
 from app.models import Company, User
+from app.services.audit import audit_from_request
 
 router = APIRouter(prefix="/company", tags=["company"])
 log = logging.getLogger("teledesk.company")
@@ -99,8 +100,9 @@ def get_company(
 @router.put("")
 def update_company(
     body: CompanyIn,
+    request: Request,
     c: Company = Depends(current_company),
-    _admin: User = Depends(require_role("admin", "owner")),
+    actor: User = Depends(require_role("admin", "owner")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -124,5 +126,18 @@ def update_company(
             500,
             "حصل خطأ أثناء حفظ إعدادات الشركة",
         )
+
+    try:
+        audit_from_request(
+            db,
+            action="company.settings_update",
+            target=str(c.id),
+            metadata={"updated_fields": list(values.keys())},
+            user=actor,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for company settings update")
 
     return {"ok": True}
