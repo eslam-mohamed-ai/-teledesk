@@ -67,6 +67,12 @@ def ensure_bucket():
                 raise
 
 
+def check_bucket():
+    """Check that the configured object-storage bucket is reachable."""
+
+    _client().head_bucket(Bucket=settings.MINIO_BUCKET)
+
+
 def put(
     key: str,
     data: bytes,
