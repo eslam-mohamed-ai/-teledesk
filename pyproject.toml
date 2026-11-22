@@ -1,0 +1,26 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+src = ["backend"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.mypy]
+python_version = "3.11"
+files = ["backend/app"]
+ignore_missing_imports = true
+check_untyped_defs = false
+disallow_untyped_defs = false
+no_implicit_optional = false
+warn_return_any = false
+warn_unused_ignores = false
+mypy_path = "backend"
+
+[[tool.mypy.overrides]]
+module = ["app.routes.bots", "app.routes.stats"]
+ignore_errors = true
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
