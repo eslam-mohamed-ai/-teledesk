@@ -166,3 +166,36 @@ The TeleDesk team"""
 
 def _normalize_lang(lang: str | None) -> str:
     return "ar" if (lang or "en").startswith("ar") else "en"
+
+
+def invitation_email_template(inviter_name: str, invitee_email: str, token: str, base_url: str, lang: str = "en") -> tuple[str, str, str]:
+    accept_url = f"{base_url.rstrip('/')}/auth/accept-invitation?token={token}"
+    if lang == "ar":
+        subject = "دعوة للانضمام إلى فريق TeleDesk"
+        text = f"""أهلاً،
+
+دُعيت من قبل {inviter_name} للانضمام إلى فريقه على TeleDesk.
+
+اضغط على الرابط التالي لقبول الدعوة وإنشاء حسابك:
+{accept_url}
+
+الرابط صالح لمدة 7 أيام.
+
+تحياتي,
+فريق TeleDesk"""
+        html = f"""<p>أهلاً،</p><p>دُعيت من قبل <b>{inviter_name}</b> للانضمام إلى فريقه على TeleDesk.</p><p>اضغط على الرابط التالي لقبول الدعوة وإنشاء حسابك:</p><p><a href="{accept_url}">{accept_url}</a></p><p>الرابط صالح لمدة 7 أيام.</p><p>تحياتي,<br>فريق TeleDesk</p>"""
+    else:
+        subject = "Invitation to join TeleDesk team"
+        text = f"""Hi,
+
+You've been invited by {inviter_name} to join their team on TeleDesk.
+
+Click the link below to accept the invitation and create your account:
+{accept_url}
+
+The link is valid for 7 days.
+
+Regards,
+The TeleDesk team"""
+        html = f"""<p>Hi,</p><p>You've been invited by <b>{inviter_name}</b> to join their team on TeleDesk.</p><p>Click the link below to accept the invitation and create your account:</p><p><a href="{accept_url}">{accept_url}</a></p><p>The link is valid for 7 days.</p><p>Regards,<br>The TeleDesk team</p>"""
+    return subject, text, html

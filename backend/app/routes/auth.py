@@ -36,6 +36,7 @@ from app.models import (
     RefreshToken,
     User,
 )
+from app.services.audit import audit_from_request
 from app.services.auth import (
     authenticate_user,
     check_rate_limit,
@@ -225,7 +226,7 @@ def register(
             email=email,
             password_hash=hash_password(body.password),
             email_verified=False,
-            role="agent",
+            role="owner",
         )
         db.add(user)
         db.commit()
@@ -292,6 +293,19 @@ def login(
 
     _issue_tokens(response, db, user, request.headers.get("user-agent"), request.client.host if request.client else None)
 
+    try:
+        audit_from_request(
+            db,
+            action="auth.login",
+            target=str(user.id),
+            metadata={"email": user.email},
+            user=user,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for login")
+
     return {"user": _user_out(user), "email_verified": user.email_verified}
 
 
@@ -314,6 +328,19 @@ def logout(
         revoke_all_user_tokens(db, user.id)
 
     _clear_session_cookies(response)
+
+    try:
+        audit_from_request(
+            db,
+            action="auth.logout",
+            target=str(user.id),
+            user=user,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for logout")
+
     return {"ok": True}
 
 
@@ -442,6 +469,18 @@ def reset_password(
     db.commit()
     _clear_session_cookies(response)
 
+    try:
+        audit_from_request(
+            db,
+            action="auth.password_reset",
+            target=str(user.id),
+            user=user,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for password reset")
+
     return {"ok": True}
 
 
@@ -465,6 +504,18 @@ def change_password(
     revoke_all_user_tokens(db, user.id)
     db.commit()
     _clear_session_cookies(response)
+
+    try:
+        audit_from_request(
+            db,
+            action="auth.password_change",
+            target=str(user.id),
+            user=user,
+            ip=request.client.host if request.client else None,
+        )
+        db.commit()
+    except Exception:
+        log.exception("audit log write failed for password change")
 
     return {"ok": True}
 

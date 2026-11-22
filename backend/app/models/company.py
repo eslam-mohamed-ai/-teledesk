@@ -41,6 +41,8 @@ class Company(Base):
     onboarding_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
     onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     profile: Mapped[dict | None] = mapped_column(postgresql.JSONB(astext_type=Text()), nullable=True)
+    lead_capture_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    lead_capture_consent_text: Mapped[str] = mapped_column(Text, default="قد نطلب بعض التفاصيل (مثل الاسم أو رقم الهاتف) لتحسين الخدمة. يمكنك رفض مشاركة أي بيانات لا تريد الكشف عنها.")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     users: Mapped[list["User"]] = relationship(back_populates="company")

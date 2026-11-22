@@ -144,3 +144,47 @@ def generate_reply(
     )
 
     return _parse_response(response.text)
+
+
+def generate_onboarding_suggestion(company_description: str) -> dict[str, str]:
+    """Gemini-based suggestion of welcome message, tone, and handoff keywords.
+
+    Returns editable suggestions, never auto-applied.
+    """
+    prompt = (
+        "أنت مساعد إعداد حساب TeleDesk. بناءً على وصف الشركة التالي، اقترح:\n"
+        "1. welcome: رسالة ترحيب قصيرة بالعربية.\n"
+        "2. tone: إحدى القيم: friendly, professional, formal.\n"
+        "3. handoff_keywords: قائمة كلمات مفتاحية تفصل بفاصلة تدل على ضرورة التحويل لبشر.\n\n"
+        "أرجع JSON فقط بالشكل: {\"welcome\": \"...\", \"tone\": \"...\", \"handoff_keywords\": \"...\"}\n\n"
+        f"وصف الشركة:\n{company_description}"
+    )
+    try:
+        response = client().models.generate_content(
+            model=settings.GEMINI_CHAT_MODEL,
+            contents=[types.Content(role="user", parts=[types.Part(text=prompt)])],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                temperature=0.4,
+            ),
+        )
+        text = response.text or ""
+        text = text.strip()
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+        import json as _json
+
+        data = _json.loads(text)
+        if not isinstance(data, dict):
+            raise ValueError("استجابة ليست كائن")
+        return {
+            "welcome": str(data.get("welcome", "أهلاً! كيف يمكنني مساعدتك؟")),
+            "tone": str(data.get("tone", "friendly")),
+            "handoff_keywords": str(data.get("handoff_keywords", "شكوى,استرداد,مكسور")),
+        }
+    except Exception:
+        return {
+            "welcome": "أهلاً! كيف يمكنني مساعدتك اليوم؟",
+            "tone": "friendly",
+            "handoff_keywords": "شكوى,استرداد,مكسور",
+        }

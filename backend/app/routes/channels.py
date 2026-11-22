@@ -19,8 +19,8 @@ from sqlalchemy.orm import Session
 from app.channels.registry import get as get_adapter
 from app.channels.types import EventKind
 from app.database import get_db
-from app.deps import current_company
-from app.models import Channel, Company
+from app.deps import current_company, require_role
+from app.models import Channel, Company, User
 from app.pipeline.ingest import ingest_inbound
 
 router = APIRouter(prefix="/api/channels", tags=["channels"])
@@ -74,6 +74,7 @@ async def connect_channel(
     body: ChannelConnectIn,
     c: Company = Depends(current_company),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_role("admin", "owner")),
 ):
     adapter_cls = get_adapter(provider)
     if adapter_cls is None:
@@ -126,6 +127,7 @@ def disconnect_channel(
     channel_id: int,
     c: Company = Depends(current_company),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_role("admin", "owner")),
 ):
     channel = db.scalar(
         select(Channel).where(Channel.id == channel_id, Channel.company_id == c.id)

@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import current_company
-from app.models import Company
+from app.deps import current_company, require_role
+from app.models import Company, User
 from app.services.plans import PLANS, usage
 
 router = APIRouter(prefix="/billing", tags=["billing"])
@@ -42,6 +42,7 @@ def billing(
 def change_plan(
     body: PlanIn,
     c: Company = Depends(current_company),
+    _admin: User = Depends(require_role("admin", "owner")),
 ):
     new_plan = body.plan.strip().lower()
 

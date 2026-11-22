@@ -16,10 +16,12 @@ from app.models import (
     Contact,
     ContactIdentity,
     Conversation,
+    InternalNote,
     Message,
     ProcessedEvent,
 )
 from app.pipeline.realtime import publish
+from app.services.lead_capture import handle_lead_capture
 
 log = logging.getLogger("teledesk.pipeline.ingest")
 
@@ -132,6 +134,65 @@ async def ingest_inbound(db: Session, channel: Channel, event: InboundEvent) -> 
     # touch last_seen
     contact.last_seen_at = _now()
     db.add(contact)
+
+    # 3) Resolve or create conversation (reuse latest non-closed one).
+    conv = db.execute(
+        select(Conversation)
+        .where(
+            Conversation.company_id == company.id,
+            Conversation.channel_id == channel.id,
+            Conversation.contact_id == contact.id,
+            Conversation.status != "closed",
+        )
+        .order_by(Conversation.last_message_at.desc().nullslast(), Conversation.id.desc())
+    ).scalar_one_or_none()
+    if conv is None:
+        lang = profile.language or ("ar" if _is_arabic(text or "") else "en")
+        conv = Conversation(
+            company_id=company.id,
+            channel_id=channel.id,
+            contact_id=contact.id,
+            customer_name=profile.display_name or external_user_id,
+            lang=lang,
+            status="open",
+            priority="normal",
+            unread_count=0,
+            created_at=_now(),
+            last_message_at=_now(),
+        )
+        db.add(conv)
+        db.flush()
+
+    # --- Lead capture: extract values, refuse sensitive data, track next question ---
+    lead_capture_next_question: str | None = None
+    if company.lead_capture_enabled and text:
+        try:
+            refusal = await handle_lead_capture(db, company, contact, text)
+        except Exception:
+            log.exception("lead capture handling failed")
+            refusal = None
+        if refusal:
+            from app.services.lead_capture import sensitive_data_detected
+
+            sensitive = sensitive_data_detected(text)
+            if sensitive:
+                # Replace sensitive content with a refusal notice and write a timeline note.
+                text = f"[تم حجب محتوى حساس: {sensitive}]"
+                db.add(
+                    InternalNote(
+                        conversation_id=conv.id,
+                        user_id=None,
+                        body=f"تم رفض تخزين بيانات حساسة من العميل: {sensitive}",
+                    )
+                )
+            # Store the lead-capture prompt (if any) so the turn processor can include it in the AI reply.
+            lead_capture_next_question = refusal if not sensitive else None
+    # Persist any next_question on the contact for the turn processor.
+    if lead_capture_next_question:
+        fields = dict(contact.custom_fields or {})
+        fields["lead_capture_next_question"] = lead_capture_next_question
+        contact.custom_fields = fields
+        db.add(contact)
 
     # 3) Resolve or create conversation (reuse latest non-closed one).
     conv = db.execute(

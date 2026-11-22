@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.deps import current_company
-from app.models import Company
+from app.deps import current_company, require_role
+from app.models import Company, User
 
 router = APIRouter(prefix="/company", tags=["company"])
 log = logging.getLogger("teledesk.company")
@@ -100,6 +100,7 @@ def get_company(
 def update_company(
     body: CompanyIn,
     c: Company = Depends(current_company),
+    _admin: User = Depends(require_role("admin", "owner")),
     db: Session = Depends(get_db),
 ):
     try:

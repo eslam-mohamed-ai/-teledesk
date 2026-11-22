@@ -14,6 +14,7 @@ from app.deps import current_user  # noqa: F401  (kept for symmetry; not used he
 from app.models import (
     Channel,
     Company,
+    Contact,
     Conversation,
     Document,
     Message,
@@ -167,6 +168,20 @@ def process_conversation_turn(self, conversation_id: str) -> dict:
             latest_in.unanswered = True
 
         answer = result.get("answer") or "مش قادر أجاوب على السؤال ده حاليًا."
+
+        # --- Lead capture: append the next field question (one at a time) ---
+        contact = db.get(Contact, conv.contact_id) if conv.contact_id else None
+        lead_question = None
+        if contact and contact.custom_fields:
+            lead_question = contact.custom_fields.get("lead_capture_next_question")
+            if lead_question:
+                fields = dict(contact.custom_fields)
+                fields.pop("lead_capture_next_question", None)
+                contact.custom_fields = fields
+                db.add(contact)
+
+        if lead_question:
+            answer = f"{answer}\n\n{lead_question}"
 
         # 8) Persist AI message as `queued` FIRST (delivery status tracked separately).
         ai_msg = Message(

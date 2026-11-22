@@ -112,6 +112,7 @@ def test_register_creates_user_and_issues_cookies(client, fake_sender, event_loo
 
     assert resp.status_code == 201, resp.text
     assert resp.json()["user"]["email"] == "alice@example.com"
+    assert resp.json()["user"]["role"] == "owner"
     assert settings.SESSION_COOKIE_NAME in resp.cookies
     assert settings.REFRESH_COOKIE_NAME in resp.cookies
     assert settings.CSRF_COOKIE_NAME in resp.cookies

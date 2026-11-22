@@ -15,9 +15,12 @@ from app.routes import (
     channels,
     company,
     conversations,
+    contacts,
     documents,
     health,
+    onboarding,
     stats,
+    team,
     webhooks,
 )
 from app.services import storage
@@ -42,7 +45,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="TeleDesk", lifespan=lifespan)
 app.add_middleware(RequestIDMiddleware)
 
-for r in (auth, company, documents, bots, conversations, stats, billing):
+for r in (auth, company, documents, bots, conversations, contacts, stats, billing, team, onboarding):
     app.include_router(r.router, prefix="/api")
 
 app.include_router(webhooks.router)
