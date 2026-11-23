@@ -9,6 +9,8 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: "./src/setupTests.ts",
     exclude: ["e2e/**", "node_modules/**", "dist/**"],
+    pool: "threads",
+    maxWorkers: 2,
   },
   server: {
     port: 5173,

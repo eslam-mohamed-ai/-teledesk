@@ -6,26 +6,16 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Search, Mail, Phone, Tag, Users, Clock, Plus } from "lucide-react"
+import { Search, Mail, Phone, Tag, Users, Clock, Plus, MessageSquare } from "lucide-react"
 import { useTranslation } from "@/lib/i18n-react"
 import { cn } from "@/lib/utils"
+import type { Contact } from "@/types/inbox"
 
-type Contact = {
+type ContactNote = {
   id: number
-  name: string
-  email: string | null
-  phone: string | null
-  channel: string | null
-  tags: string[]
-  last_message_at: string | null
-  unread_count: number
-}
-
-type Note = {
-  id: number
-  content: string
+  body: string
   created_at: string
-  author_name: string | null
+  user_name: string | null
 }
 
 export default function Contacts() {
@@ -34,6 +24,7 @@ export default function Contacts() {
 
   const [tab, setTab] = React.useState<string>("details")
   const [selectedContactId, setSelectedContactId] = React.useState<number | null>(null)
+  const noteInputRef = React.useRef<HTMLInputElement>(null)
 
   const { data: contacts = [], isLoading } = useQuery<Contact[]>({
     queryKey: ["contacts"],
@@ -43,7 +34,7 @@ export default function Contacts() {
     },
   })
 
-  const notesQuery = useQuery<Note[]>({
+  const notesQuery = useQuery<ContactNote[]>({
     queryKey: ["contact-notes", selectedContactId],
     queryFn: async () => {
       if (!selectedContactId) return []
@@ -55,13 +46,21 @@ export default function Contacts() {
 
   const addNoteMutation = useMutation({
     mutationFn: async ({ contactId, content }: { contactId: number; content: string }) => {
-      const res = await api.post(`/contacts/${contactId}/notes`, { content })
+      const res = await api.post(`/contacts/${contactId}/notes`, { body: content })
       return res.data
     },
     onSuccess: (_, { contactId }) => {
       queryClient.invalidateQueries({ queryKey: ["contact-notes", contactId] })
+      if (noteInputRef.current) noteInputRef.current.value = ""
     },
   })
+
+  const handleAddNote = () => {
+    if (!selectedContactId || !noteInputRef.current?.value?.trim()) return
+    addNoteMutation.mutate({ contactId: selectedContactId, content: noteInputRef.current.value.trim() })
+  }
+
+  const getDisplayName = (contact: Contact) => contact.display_name || contact.first_name || contact.last_name || t("unknown_contact")
 
   return (
     <div className="flex h-full w-full">
@@ -72,7 +71,7 @@ export default function Contacts() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
             <input
               type="text"
-              placeholder="Search contacts..."
+              placeholder={t("search_contacts")}
               className="h-8 w-full pl-9 pr-3 rounded-lg border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-600 dark:bg-neutral-800 dark:border-neutral-700 dark:text-neutral-100 dark:focus:ring-brand-500"
             />
           </div>
@@ -109,9 +108,9 @@ export default function Contacts() {
                     </div>
                     <div className="flex flex-col min-w-0">
                       <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">
-                        {contact.name}
+                        {getDisplayName(contact)}
                       </p>
-                      <p className="text-xs text-neutral-500 truncate">{contact.email || contact.phone || "No contact info"}</p>
+                      <p className="text-xs text-neutral-500 truncate">{contact.email || contact.phone || t("no_contact_info")}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
@@ -134,9 +133,9 @@ export default function Contacts() {
           <div className="flex-1 flex items-center justify-center p-12 text-center">
             <div>
               <Users className="mx-auto mb-4 h-12 w-12 text-neutral-400" />
-              <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">Select a contact</h3>
+              <h3 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t("select_contact")}</h3>
               <p className="text-neutral-500 dark:text-neutral-400 mt-1">
-                Pick a contact to view details and timeline.
+                {t("select_contact_prompt")}
               </p>
             </div>
           </div>
@@ -149,7 +148,7 @@ export default function Contacts() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">
-                    {contacts.find((c) => c.id === selectedContactId)?.name || "Unknown contact"}
+                    {contacts.find((c) => c.id === selectedContactId)?.display_name || t("unknown_contact")}
                   </p>
                   <p className="text-xs text-neutral-500">{contacts.find((c) => c.id === selectedContactId)?.email || ""}</p>
                 </div>
@@ -159,7 +158,7 @@ export default function Contacts() {
               <Tabs defaultValue="details" onValueChange={(value) => setTab(value)}>
                 <TabsList className="flex gap-1 p-4 mb-3">
                   <TabsTrigger value="details" className="px-4 py-2 text-sm font-medium transition-colors data-[state=active]:bg-brand-600 data-[state=active]:text-white rounded-lg">
-                    {t("contact_details")}
+                    {t("details")}
                   </TabsTrigger>
                   <TabsTrigger value="timeline" className="px-4 py-2 text-sm font-medium transition-colors data-[state=active]:bg-brand-600 data-[state=active]:text-white rounded-lg">
                     {t("timeline")}
@@ -171,19 +170,19 @@ export default function Contacts() {
                 <TabsContent value="details" className="p-4 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">Email</p>
+                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">{t("email")}</p>
                       <p className="text-sm text-neutral-900 dark:text-neutral-100">{contacts.find((c) => c.id === selectedContactId)?.email || "—"}</p>
                     </div>
                     <div className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">Phone</p>
+                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">{t("phone")}</p>
                       <p className="text-sm text-neutral-900 dark:text-neutral-100">{contacts.find((c) => c.id === selectedContactId)?.phone || "—"}</p>
                     </div>
                     <div className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">Channel</p>
-                      <p className="text-sm text-neutral-900 dark:text-neutral-100">{contacts.find((c) => c.id === selectedContactId)?.channel || "—"}</p>
+                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">{t("language")}</p>
+                      <p className="text-sm text-neutral-900 dark:text-neutral-100">{contacts.find((c) => c.id === selectedContactId)?.language || "—"}</p>
                     </div>
                     <div className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
-                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">Tags</p>
+                      <p className="text-xs text-neutral-500 uppercase font-medium mb-1">{t("tags")}</p>
                       <div className="flex flex-wrap gap-1">
                         {contacts.find((c) => c.id === selectedContactId)?.tags.map((tag) => (
                           <Badge key={tag} variant="secondary" className="text-xs">
@@ -193,21 +192,31 @@ export default function Contacts() {
                       </div>
                     </div>
                   </div>
+                  <div className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
+                    <p className="text-xs text-neutral-500 uppercase font-medium mb-1">{t("ai_collected_fields")}</p>
+                    <div className="flex flex-wrap gap-1">
+                      {contacts.find((c) => c.id === selectedContactId)?.ai_collected_fields.map((field) => (
+                        <Badge key={field} variant="brand" className="text-xs">
+                          {field}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 </TabsContent>
                 <TabsContent value="timeline" className="p-4 space-y-4">
                   <div className="space-y-6">
                     <div className="flex items-start gap-3">
                       <div className="h-2 w-2 rounded-full bg-brand-500 mt-1" />
                       <div className="flex-1">
-                        <p className="text-sm text-neutral-900 dark:text-neutral-100">Contact created</p>
-                        <p className="text-xs text-neutral-500">Just now</p>
+                        <p className="text-sm text-neutral-900 dark:text-neutral-100">{t("contact_created")}</p>
+                      <p className="text-xs text-neutral-500">{contacts.find((c) => c.id === selectedContactId)?.created_at || t("just_now")}</p>
                       </div>
                     </div>
                     <div className="flex items-start gap-3">
                       <div className="h-2 w-2 rounded-full bg-neutral-400 mt-1" />
                       <div className="flex-1">
-                        <p className="text-sm text-neutral-900 dark:text-neutral-100">First message received</p>
-                        <p className="text-xs text-neutral-500">Just now</p>
+                        <p className="text-sm text-neutral-900 dark:text-neutral-100">{t("first_message_received")}</p>
+                        <p className="text-xs text-neutral-500">{contacts.find((c) => c.id === selectedContactId)?.last_seen_at || t("just_now")}</p>
                       </div>
                     </div>
                   </div>
@@ -217,15 +226,20 @@ export default function Contacts() {
                     {notesQuery.data?.map((note) => (
                       <div key={note.id} className="bg-white dark:bg-neutral-800 rounded-lg p-4 border border-neutral-200 dark:border-neutral-700">
                         <div className="flex justify-between items-start mb-2">
-                          <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{note.author_name || "You"}</p>
+                          <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{note.user_name || t("you")}</p>
                           <p className="text-xs text-neutral-500">{note.created_at}</p>
                         </div>
-                        <p className="text-sm text-neutral-700 dark:text-neutral-300">{note.content}</p>
+                        <p className="text-sm text-neutral-700 dark:text-neutral-300">{note.body}</p>
                       </div>
                     ))}
                     <div className="flex gap-2">
-                      <Input placeholder="Add a note..." />
-                      <Button size="sm" onClick={() => {}}>Add</Button>
+                      <Input
+                        placeholder={t("add_note")}
+                        ref={(el) => { noteInputRef.current = el }}
+                      />
+                      <Button size="sm" onClick={handleAddNote} disabled={addNoteMutation.isPending || !noteInputRef.current?.value?.trim()}>
+                        {t("add")}
+                      </Button>
                     </div>
                   </div>
                 </TabsContent>
