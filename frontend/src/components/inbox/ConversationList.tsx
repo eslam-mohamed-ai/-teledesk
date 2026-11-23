@@ -3,6 +3,7 @@ import { Bot, User, AlertCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { initials, relativeTime, providerLabel, statusLabel } from "@/lib/format"
+import { useTranslation } from "@/lib/i18n-react"
 import type { Conversation } from "@/types/inbox"
 
 const ROW_HEIGHT = 76
@@ -29,6 +30,7 @@ export function ConversationList({
   isLoading,
   resetKey,
 }: Props) {
+  const { t } = useTranslation()
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const [scrollTop, setScrollTop] = React.useState(0)
   const [viewport, setViewport] = React.useState(600)
@@ -110,11 +112,11 @@ export function ConversationList({
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100">
-                      {conv.contact_name || "Unknown contact"}
+                      {conv.contact_name || t("unknown_contact")}
                     </p>
                     {conv.needs_human && (
                       <span className="flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">
-                        <AlertCircle className="h-3 w-3" /> Human
+                        <AlertCircle className="h-3 w-3" /> {t("human")}
                       </span>
                     )}
                     <span className="ml-auto shrink-0 text-[11px] text-neutral-400">
@@ -122,7 +124,7 @@ export function ConversationList({
                     </span>
                   </div>
                   <p className="truncate text-xs text-neutral-500 dark:text-neutral-400">
-                    {conv.last_preview || "No messages yet"}
+                    {conv.last_preview || t("no_messages_yet")}
                   </p>
                   <div className="mt-1 flex items-center gap-1.5">
                     <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">

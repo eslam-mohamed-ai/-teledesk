@@ -210,5 +210,6 @@ test("signup -> onboarding -> connect mocked channel -> inbox", async ({ page })
   await page.goto("/inbox")
   await expect(page.getByText("Jane Doe")).toBeVisible()
   await page.getByRole("button", { name: /Jane Doe/ }).click()
-  await expect(page.getByText("Hello from customer")).toBeVisible()
+  // Scope to message thread bubble to avoid matching conversation list preview
+  await expect(page.locator('p.whitespace-pre-wrap').getByText("Hello from customer")).toBeVisible()
 })

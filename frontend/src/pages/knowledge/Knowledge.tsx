@@ -7,14 +7,16 @@ import { Badge } from "@/components/ui/badge"
 import { FileText, Upload, Zap, Search, Trash2, Edit3 } from "lucide-react"
 import { useTranslation } from "@/lib/i18n-react"
 import { cn } from "@/lib/utils"
+import { toast } from "@/components/ui/toaster"
 
 type Document = {
   id: number
-  filename: string
-  status: string
-  chunks: number
-  uploaded_at: string
+  name: string
+  kind: string
   size: number
+  status: string
+  uses: number
+  updated_at: string | null
 }
 
 export default function Knowledge() {
@@ -24,8 +26,22 @@ export default function Knowledge() {
   const { data: documents = [], isLoading } = useQuery<Document[]>({
     queryKey: ["documents"],
     queryFn: async () => {
-      const res = await api.get("/knowledge/documents")
+      const res = await api.get("/documents")
       return res.data.items
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await api.delete(`/documents/${id}`)
+      return id
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["documents"] })
+      toast.success("Document deleted")
+    },
+    onError: (error) => {
+      toast.error("Failed to delete document")
     },
   })
 
@@ -36,7 +52,7 @@ export default function Knowledge() {
     if (!file) return
     const formData = new FormData()
     formData.append("file", file)
-    api.post("/knowledge/documents", formData, {
+    api.post("/documents/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
     }).then(() => {
       queryClient.invalidateQueries({ queryKey: ["documents"] })
@@ -48,13 +64,13 @@ export default function Knowledge() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Knowledge base</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{t("knowledge_base")}</h1>
           <p className="text-neutral-500 dark:text-neutral-400">
-            Upload documents to train your AI assistant.
+            {t("upload_documents_to_train")}
           </p>
         </div>
         <Button onClick={() => uploadRef.current!.click()}>
-          <Upload className="mr-2 h-4 w-4" /> Upload document
+          <Upload className="mr-2 h-4 w-4" /> {t("upload_document")}
         </Button>
         <input ref={uploadRef} type="file" className="hidden" onChange={handleUpload} />
       </div>
@@ -62,7 +78,7 @@ export default function Knowledge() {
       <div className="grid gap-4">
         <Card>
           <CardHeader>
-            <CardTitle>Documents</CardTitle>
+            <CardTitle>{t("documents")}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -72,7 +88,7 @@ export default function Knowledge() {
             ) : documents.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <FileText className="h-12 w-12 text-neutral-400 mb-2" />
-                <p className="text-sm text-neutral-500">No documents uploaded yet.</p>
+                <p className="text-sm text-neutral-500">{t("no_documents_yet")}</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -83,9 +99,9 @@ export default function Knowledge() {
                         <FileText className="h-4 w-4" />
                       </div>
                       <div className="flex flex-col min-w-0">
-                        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">{doc.filename}</p>
+                        <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100 truncate">{doc.name}</p>
                         <p className="text-xs text-neutral-500">
-                          {Math.round(doc.size / 1024)} KB • {doc.chunks} chunks
+                          {Math.round(doc.size / 1024)} KB • {doc.uses} chunks
                         </p>
                       </div>
                     </div>
@@ -93,7 +109,13 @@ export default function Knowledge() {
                       <Badge variant={doc.status === "ready" ? "brand" : "secondary"} className="text-xs">
                         {doc.status}
                       </Badge>
-                      <Button variant="outline" size="sm" onClick={() => {}} className="text-neutral-500">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteMutation.mutate(doc.id)}
+                        disabled={deleteMutation.isPending}
+                        className="text-neutral-500 hover:text-red-600 hover:border-red-300 dark:hover:border-red-700"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -102,22 +124,16 @@ export default function Knowledge() {
               </div>
             )}
           </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Training status</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-neutral-500">Documents indexed</span>
+          <CardFooter className="flex justify-between items-center">
+            <div className="flex justify-between text-sm mb-2 w-full">
+              <span className="text-neutral-500">{t("documents_indexed")}</span>
               <span className="text-neutral-900 dark:text-neutral-100 font-medium">{documents.length}</span>
             </div>
             <div className="w-full bg-neutral-200 dark:bg-neutral-700 rounded-full h-2">
               <div className="h-full bg-brand-600 rounded-full transition-all duration-500" style={{ width: "85%" }} />
             </div>
-            <p className="text-xs text-neutral-500">85% of documents processed successfully.</p>
-          </CardContent>
+            <p className="text-xs text-neutral-500">{t("documents_processed_successfully")}</p>
+          </CardFooter>
         </Card>
       </div>
     </div>

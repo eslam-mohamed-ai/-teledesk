@@ -34,9 +34,12 @@ export default function Login() {
       const res = await api.post("/auth/login", data)
       const { user, email_verified } = res.data
       // Tokens are set in httpOnly cookies by the server
+      // Fetch company info after login
+      const companyRes = await api.get("/company")
+      const company = companyRes.data
       setAuth(
         { id: user.id, name: user.name, email: user.email, role: user.role, email_verified },
-        { id: user.id, name: user.name, plan: "free", onboarding_step: "profile", onboarding_completed_at: null, profile: {}, lead_capture_enabled: false, lead_capture_consent_text: "" },
+        company
       )
       if (!email_verified) {
         navigate("/auth/verify-email")

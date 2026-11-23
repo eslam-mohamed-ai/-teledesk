@@ -22,6 +22,7 @@ import { useAuthStore } from "@/store/authStore"
 import { useThemeStore } from "@/store/themeStore"
 import { useChannelHealth } from "@/hooks/useChannelHealth"
 import { CommandPalette } from "./CommandPalette"
+import { useTranslation } from "@/lib/i18n-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,13 +32,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 
 const navItems = [
-  { name: "inbox", icon: Mail, label: "Inbox", href: "/inbox" },
-  { name: "contacts", icon: Users, label: "Contacts", href: "/contacts" },
-  { name: "channels", icon: Zap, label: "Channels", href: "/channels" },
-  { name: "ai", icon: LayoutDashboard, label: "AI Agent", href: "/ai" },
-  { name: "knowledge", icon: FileText, label: "Knowledge", href: "/knowledge" },
-  { name: "analytics", icon: BarChart2, label: "Analytics", href: "/analytics" },
-  { name: "settings", icon: Settings, label: "Settings", href: "/settings" },
+  { name: "inbox", icon: Mail, label: "inbox", href: "/inbox" },
+  { name: "contacts", icon: Users, label: "contacts", href: "/contacts" },
+  { name: "channels", icon: Zap, label: "channels", href: "/channels" },
+  { name: "ai", icon: LayoutDashboard, label: "ai_agent", href: "/ai" },
+  { name: "knowledge", icon: FileText, label: "knowledge", href: "/knowledge" },
+  { name: "analytics", icon: BarChart2, label: "analytics", href: "/analytics" },
+  { name: "settings", icon: Settings, label: "settings", href: "/settings" },
 ]
 
 export function Shell({ children }: { children?: React.ReactNode }) {
@@ -45,6 +46,7 @@ export function Shell({ children }: { children?: React.ReactNode }) {
   const currentPath = location.pathname
   const isInbox = currentPath.startsWith("/inbox")
   const [paletteOpen, setPaletteOpen] = React.useState(false)
+  const { t } = useTranslation()
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -91,6 +93,7 @@ function Sidebar({
   const logout = useAuthStore((state) => state.logout)
   const theme = useThemeStore((state) => state.theme)
   const toggleTheme = useThemeStore((state) => state.toggle)
+  const { t } = useTranslation()
 
   return (
     <aside className="hidden w-16 shrink-0 flex-col items-center bg-rail py-3 md:flex">
@@ -110,7 +113,7 @@ function Sidebar({
             <button
               key={item.name}
               onClick={() => navigate(item.href)}
-              title={item.label}
+              title={t(item.label)}
               className={cn(
                 "flex h-10 w-10 items-center justify-center rounded-xl transition-colors",
                 active
@@ -134,14 +137,14 @@ function Sidebar({
         </button>
         <button
           onClick={toggleTheme}
-          title={theme === "dark" ? "Light mode" : "Dark mode"}
+          title={theme === "dark" ? t("light_mode") : t("dark_mode")}
           className="flex h-10 w-10 items-center justify-center rounded-xl text-brand-100/70 hover:bg-rail-hover hover:text-white"
         >
           {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
         </button>
         <button
           onClick={logout}
-          title="Sign out"
+          title={t("sign_out")}
           className="flex h-10 w-10 items-center justify-center rounded-xl text-brand-100/70 hover:bg-rail-hover hover:text-white"
         >
           <LogOut className="h-5 w-5" />
@@ -160,6 +163,7 @@ function Topbar({
 }) {
   const { user, company, setLanguage, logout } = useAuthStore()
   const health = useChannelHealth()
+  const { t } = useTranslation()
 
   return (
     <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 dark:border-neutral-800 dark:bg-neutral-900">
@@ -167,7 +171,7 @@ function Topbar({
         <button
           onClick={onOpenMobileNav}
           className="rounded-md p-1 text-neutral-500 hover:bg-neutral-100 md:hidden"
-          aria-label="Open menu"
+          aria-label={t("open_menu")}
         >
           <Menu className="h-5 w-5" />
         </button>
@@ -182,7 +186,7 @@ function Topbar({
 
         <div
           className="hidden items-center gap-1.5 rounded-full border border-neutral-200 px-2.5 py-1 text-xs md:flex dark:border-neutral-700"
-          title="Live channel health"
+          title={t("live_channel_health")}
         >
           <span
             className={cn(
@@ -202,7 +206,7 @@ function Topbar({
           className="hidden items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-500 hover:bg-neutral-100 md:flex dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-400"
         >
           <Search className="h-3.5 w-3.5" />
-          <span>Search or jump to…</span>
+          <span>{t("search_or_jump")}</span>
           <kbd className="ml-4 rounded border border-neutral-200 px-1 text-[10px] dark:border-neutral-600">
             Ctrl K
           </kbd>
@@ -211,7 +215,7 @@ function Topbar({
 
       <div className="flex items-center gap-2">
         <Badge variant="outline" className="hidden sm:inline-flex">
-          {health.total > 0 ? `${health.online}/${health.total} channels` : "No channels"}
+          {health.total > 0 ? `${health.online}/${health.total} channels` : t("no_channels")}
         </Badge>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -221,11 +225,11 @@ function Topbar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setLanguage("en")}>English</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setLanguage("ar")}>العربية</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setLanguage("en")}>{t("english")}</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setLanguage("ar")}>{t("arabic")}</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={logout} className="text-red-500">
-              Sign out
+              {t("sign_out")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -236,6 +240,7 @@ function Topbar({
 
 function MobileNav({ currentPath }: { currentPath: string }) {
   const navigate = useNavigate()
+  const { t } = useTranslation()
   const items = navItems.slice(0, 4)
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex h-16 items-center justify-around border-t border-neutral-200 bg-white pb-[env(safe-area-inset-bottom)] md:hidden dark:border-neutral-800 dark:bg-neutral-900">
@@ -252,7 +257,7 @@ function MobileNav({ currentPath }: { currentPath: string }) {
             )}
           >
             <Icon className="h-5 w-5" />
-            {item.label}
+            {t(item.label)}
           </button>
         )
       })}

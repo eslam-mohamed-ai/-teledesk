@@ -16,10 +16,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { ChannelCard } from "@/components/channels/ChannelCard"
+import { useTranslation } from "@/lib/i18n-react"
 import { cn } from "@/lib/utils"
 import type { Channel, ProviderMetadata } from "@/types/inbox"
 
 export default function Channels() {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const [open, setOpen] = React.useState(false)
   const [selected, setSelected] = React.useState<string>("telegram")
@@ -79,7 +81,7 @@ export default function Channels() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">Channels</h1>
+          <h1 className="text-2xl font-bold text-neutral-900 dark:text-neutral-100">{t("channels")}</h1>
           <p className="text-neutral-500 dark:text-neutral-400">
             Connect messaging channels to receive customer conversations.
           </p>
@@ -88,12 +90,12 @@ export default function Channels() {
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
-              <Plus className="h-4 w-4" /> Connect channel
+              <Plus className="h-4 w-4" /> {t("connect_channel")}
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Connect a channel</DialogTitle>
+              <DialogTitle>{t("connect_channel")}</DialogTitle>
               <DialogDescription>
                 Choose a provider and enter its credentials. Providers marked “Coming soon” cannot be
                 connected yet.
@@ -129,7 +131,7 @@ export default function Channels() {
                           <span className="text-sm font-semibold">{provider.label}</span>
                           {!provider.available && (
                             <Badge variant="outline" className="text-[10px]">
-                              Coming soon
+                              {t("coming_soon")}
                             </Badge>
                           )}
                         </div>
@@ -192,7 +194,7 @@ export default function Channels() {
             Connect your first channel to start receiving customer messages.
           </p>
           <Button className="mt-4" onClick={() => setOpen(true)}>
-            Connect channel
+            {t("connect_channel")}
           </Button>
         </div>
       ) : (
