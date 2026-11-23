@@ -12,8 +12,65 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import pytest
 from fastapi.testclient import TestClient
 
-from app.channels.registry import get
+from app.channels.base import ChannelAdapter
+from app.channels.registry import get, register
+from app.channels.types import (
+    ChannelCapabilities,
+    ChannelHealth,
+    ContactProfile,
+    EventKind,
+    InboundEvent,
+    InboundMessage,
+    OutboundMessage,
+    SendResult,
+)
 from app.models import Channel, Company
+
+
+class DummyAdapter(ChannelAdapter):
+    """Test-only adapter used by the webhook contract tests."""
+
+    provider = "dummy-for-tests"
+
+    @property
+    def capabilities(self) -> ChannelCapabilities:
+        return ChannelCapabilities()
+
+    async def connect(self, company_id, payload):
+        return {"provider": self.provider, "external_id": "dummy", "display_name": "Dummy"}
+
+    async def disconnect(self, channel):
+        return None
+
+    def verify_webhook_request(self, request, channel_secret):
+        return True
+
+    def parse_webhook(self, payload):
+        return [
+            InboundEvent(
+                kind=EventKind.message,
+                provider_event_id=event.get("event_id"),
+                message=InboundMessage(
+                    external_message_id=event.get("message_id"),
+                    external_conversation_id=event.get("user_id"),
+                    external_user_id=event["user_id"],
+                    text=event.get("text"),
+                ),
+            )
+            for event in payload.get("events", [])
+        ]
+
+    async def send_message(self, channel, external_user_id, message: OutboundMessage):
+        return SendResult(ok=True, external_message_id="dummy-message")
+
+    async def fetch_profile(self, channel, external_user_id):
+        return ContactProfile(external_user_id=external_user_id)
+
+    async def health_check(self, channel):
+        return ChannelHealth.ok
+
+
+register("dummy-for-tests", DummyAdapter)
 
 
 @pytest.fixture
